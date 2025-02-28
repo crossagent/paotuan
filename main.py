@@ -7,7 +7,7 @@ import logging
 import yaml  # 添加yaml库以读取配置文件
 from dingtalk_stream import DingTalkStreamClient, Credential, ChatbotMessage
 from api.handlers.game_handler import GameMessageHandler
-from game.state.models import GameState
+from game.turn_system.logic import GameMatchLogic
 
 # 将项目根目录添加到sys.path
 project_root = os.path.dirname(os.path.abspath(__file__))
@@ -44,7 +44,9 @@ def main():
     options = define_options()
 
     # 创建游戏状态实例并初始化房间
-    game_state = GameState()
+    game_state = GameMatchLogic()
+
+    game_state.create_room("初始场景")
 
     logger.info("游戏初始化完成，等待玩家指令以开始游戏。")
 

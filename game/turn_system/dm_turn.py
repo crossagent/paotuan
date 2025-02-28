@@ -1,11 +1,24 @@
 from ai.chains.story_gen import TurnProcessingChain
 from game.turn_system.base_handler import TurnHandler
-from game.turn_system.logic import GameMatch, TurnType, Player  # 修改为从新逻辑文件中导入
-from typing import List  # 添加此行以导入List类型
+from game.turn_system.logic import GameMatchLogic
+from game.state.models import TurnType, Player
+from typing import List
 
 class DMTurnHandler(TurnHandler):
-    def __init__(self, game_logic: GameMatch):
+    def __init__(self, game_logic: GameMatchLogic):
         super().__init__(game_logic)
+
+    def handle_event(self, event: dict) -> bool:
+        if event.get('type') != 'dm_narration':
+            return False
+            
+        narration = event.get('content')
+        current_turn = self.game_logic.current_room.current_match.current_turn
+        current_turn.process_dm_turn(narration)
+        
+        # DM叙事完成后立即触发转换
+        self.set_needs_transition(True)
+        return True
 
     def generate_narration(self) -> str:
         """生成并应用剧情叙述"""
@@ -32,7 +45,7 @@ class DMTurnHandler(TurnHandler):
 
 # 示例使用
 if __name__ == "__main__":
-    game_logic = GameMatch()
+    game_logic = GameMatchLogic()
     game_logic.start_new_round("初始场景")
     player1 = Player(name="Alice")
     player2 = Player(name="Bob")

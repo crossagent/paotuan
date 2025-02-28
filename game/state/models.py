@@ -38,9 +38,17 @@ class Turn(BaseModel):
         """处理玩家行动（仅限玩家回合）"""
         if self.turn_type != TurnType.PLAYER:
             raise InvalidTurnOperation("非玩家回合不能处理玩家行动")
+            
+        if player_id not in self.active_players:
+            raise InvalidTurnOperation("当前玩家不在激活列表中")
+            
         self.actions[player_id] = action
+        logger.info(f"玩家{player_id}提交动作：{action}")
+        
+        # 仅在全部提交时标记完成
         if self.all_players_submitted():
             self.status = TurnStatus.COMPLETED
+            logger.info(f"玩家回合{self.turn_id}已完成所有提交")
 
     def process_dm_turn(self, narration: str):
         """处理DM叙事（仅限DM回合）"""

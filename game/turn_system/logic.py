@@ -5,7 +5,7 @@ from .base_handler import TurnHandler
 
 logger = logging.getLogger(__name__)
 
-class GameMatch:
+class GameMatchLogic:
     def __init__(self):
         self.current_room: Optional[Room] = None
         self.handlers: List[TurnHandler] = []
@@ -49,35 +49,45 @@ class GameMatch:
         self.current_room.current_match = None
         logger.info("比赛已结束")
 
-    def game_loop(self):
-        while True:
-            for handler in self.handlers:
-                handler.update()
-            self._handle_turn_transition()
+    def process_event(self, event: dict):
+        """统一处理游戏事件"""
+        result = None
+        transition_occurred = False
+        
+        for handler in self.handlers:
+            if handler.handle_event(event):
+                transition_occurred = True
+                
+        if transition_occurred:
+            self.handle_turn_transition()
+            
+        return result
 
-    def _handle_turn_transition(self):
-        """核心回合流转逻辑"""
+    def handle_turn_transition(self):
+        """显式处理回合状态转换"""
         if not self.current_room or not self.current_room.current_match:
-            return False
+            logger.warning("当前没有正在进行的比赛")
+            return
             
         current_match = self.current_room.current_match
-        if current_match.current_turn and current_match.current_turn.is_completed():
-            if current_match.current_turn.turn_type == TurnType.PLAYER:
-                return self._start_dm_turn(current_match)
-            else:
-                return self._start_player_turn(current_match)
-        return False
+        if current_match.handle_turn_transition():
+            logger.info(f"回合转换成功，新回合类型：{current_match.current_turn.turn_type}")
+            self._notify_players_of_next_turn()
+        else:
+            logger.warning("回合转换条件未满足")
 
-    def _start_dm_turn(self, current_match: Match):
-        current_match.start_new_turn(TurnType.DM)
-        return True
+    def _notify_players_of_next_turn(self):
+        """通知所有玩家进入下一轮"""
+        next_turn = self.get_current_turn()
+        if next_turn and next_turn.turn_type == TurnType.PLAYER:
+            # 发送消息给所有玩家，告知他们新的玩家回合开始
+            for player in self.current_room.players:
+                self.reply_to_player(player.id, "新的玩家回合已开始，请提交你的行动")
 
-    def _start_player_turn(self, current_match: Match):
-        # 需要外部设置激活玩家逻辑
-        if not current_match.current_turn.active_players:
-            raise InvalidTurnOperation("激活玩家列表不能为空")
-        current_match.start_new_turn(TurnType.PLAYER)
-        return True
+    def reply_to_player(self, player_id: str, message: str):
+        """发送消息给指定玩家"""
+        # 实现具体的发送逻辑（例如通过钉钉API）
+        logger.info(f"回复玩家 {player_id}: {message}")
 
     def get_current_turn(self) -> Optional[Turn]:
         """获取当前回合"""
@@ -85,6 +95,36 @@ class GameMatch:
             return self.current_room.current_match.current_turn
         return None
 
+# 删除不需要的方法
+# def process_turn_action(self, player_id: str, action: str) -> str:
+#     ...
+
+# def _start_dm_turn(self, current_match: Match):
+#     ...
+
+# def _start_player_turn(self, current_match: Match):
+#     ...
+
 # 新增异常类
+class PlayerTimeoutError(Exception):
+    """玩家操作超时异常"""
+
+class InvalidGameOperation(Exception):
+    """非法游戏操作异常"""
+
+# 删除不需要的方法
+# def process_turn_action(self, player_id: str, action: str) -> str:
+#     ...
+
+# def _start_dm_turn(self, current_match: Match):
+#     ...
+
+# def _start_player_turn(self, current_match: Match):
+#     ...
+
+# 新增异常类
+class PlayerTimeoutError(Exception):
+    """玩家操作超时异常"""
+
 class InvalidGameOperation(Exception):
     """非法游戏操作异常"""
