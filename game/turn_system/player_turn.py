@@ -29,24 +29,6 @@ class PlayerTurnHandler(TurnHandler):
             
         return False
 
-    def update(self):
-        """更新玩家回合状态"""
-        if self.needs_transition:
-            self.game_logic.handle_turn_transition()
-            self.set_needs_transition(False)
-
-# 示例使用
-if __name__ == "__main__":
-    game_logic = GameMatchLogic()
-    game_logic.start_new_round("初始场景")
-    player1 = Player(name="Alice")
-    game_logic.current_room.add_player(player1)
-    handler = PlayerTurnHandler(game_logic)
-    game_logic.add_handler(handler)
-    handler.start_turn(["Alice"])
-    new_state = handler.submit_action("Alice", "探索前方的道路")
-    print("更新后的游戏状态:", new_state)
-
 # 示例使用
 if __name__ == "__main__":
     game_logic = GameMatchLogic()
