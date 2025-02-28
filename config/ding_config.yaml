@@ -1,0 +1,4 @@
+# 钉钉配置
+client_id: "dings1xje0y9ejc7f2ae"
+client_secret: "es_17a4o9d6GLnpURFu3_D-AghI0xlFBpNozWo7N97akpJuZL6WwkI_eLGv9uzXC"
+log_level: "INFO"  # 日志级别配置

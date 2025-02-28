@@ -1,0 +1,33 @@
+# 标准Python忽略项
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.log
+*.pot
+.env
+venv/
+.venv/
+env/
+dist/
+build/
+pip-wheel-metadata/
+.coverage
+.coverage.*
+.pytest_cache/
+.ipynb_checkpoints/
+
+# IDE配置
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-workspace
+
+# 系统文件
+Thumbs.db
+.DS_Store
+
+# 项目特定忽略项
+/static/uploads/  # 静态文件上传目录
+/story/generated/ # 故事生成文件目录
+/config/*.local.yaml # 本地配置文件
