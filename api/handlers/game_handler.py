@@ -37,73 +37,75 @@ class GameMessageHandler(ChatbotHandler):
         self.logger.info(f"接收到玩家输入：玩家ID：{player_id} 输入内容：{text}")
 
         try:
-            # 处理加入游戏指令
-            if text == "/加入游戏" or text == "/join":
-                try:
-                    self.game_match.add_player(player_id, player_name)
-                    response_text = f"你已成功加入游戏，当前玩家数：{len(self.game_match.current_room.players) if self.game_match.current_room else 0}"
-                except InvalidGameOperation as e:
-                    response_text = f"加入游戏失败：{str(e)}"
-                    self.logger.warning(f"玩家加入游戏失败: {str(e)}")
-                except Exception as e:
-                    response_text = "加入游戏失败：系统错误."
-                    self.logger.error(f"玩家加入游戏失败: {str(e)}", exc_info=True)
-                
-            # 处理开始游戏指令
-            elif text == "/开始游戏" or text == "/start":
-                if not self.game_match.current_room:
-                    response_text = "请先创建房间"
-                elif not self.game_match.current_room.players:
-                    response_text = "房间中没有玩家，请先加入游戏"
-                elif self.game_match.current_room.current_match:
-                    response_text = "当前已有进行中的游戏局，请等待当前游戏结束。"
-                else:
+            # 首先判断是否以/打头，如果是，认为是指令，进一步分析指令内容
+            if text.startswith('/'):
+                # 处理加入游戏指令
+                if text == "/加入游戏" or text == "/join":
                     try:
-                        self.game_match.start_game(scene="初始场景")
-                        response_text = "游戏已开始，当前场景为：初始场景"
+                        self.game_match.add_player(player_id, player_name)
+                        # 注意：add_player方法内部会调用reply_to_player
+                    except InvalidGameOperation as e:
+                        self.reply_to_player(player_id, f"加入游戏失败：{str(e)}")
+                        self.logger.warning(f"玩家加入游戏失败: {str(e)}")
                     except Exception as e:
-                        response_text = f"开始游戏失败：{str(e)}"
-                        self.logger.error(f"开始游戏失败: {str(e)}", exc_info=True)
-            else:
+                        self.reply_to_player(player_id, "加入游戏失败：系统错误.")
+                        self.logger.error(f"玩家加入游戏失败: {str(e)}", exc_info=True)
+                
+                # 处理开始游戏指令
+                elif text == "/开始游戏" or text == "/start":
+                    if not self.game_match.current_room:
+                        self.reply_to_player(player_id, "请先创建房间")
+                    elif not self.game_match.current_room.players:
+                        self.reply_to_player(player_id, "房间中没有玩家，请先加入游戏")
+                    elif self.game_match.current_room.current_match:
+                        self.reply_to_player(player_id, "当前已有进行中的游戏局，请等待当前游戏结束。")
+                    else:
+                        try:
+                            self.game_match.start_game(scene="初始场景")
+                            # 注意：start_game方法内部会调用reply_to_player
+                        except Exception as e:
+                            self.reply_to_player(player_id, f"开始游戏失败：{str(e)}")
+                            self.logger.error(f"开始游戏失败: {str(e)}", exc_info=True)
+                
                 # 判断是否为回合控制命令
-                if text == "/结束回合" or text == "/end":
+                elif text == "/结束回合" or text == "/end":
                     # 直接检查当前回合是否已完成，如果已完成则执行回合转换
                     current_turn = self.game_match.get_current_turn()
                     if current_turn and current_turn.is_completed():
                         result = self.game_match.handle_turn_transition()
-                        response_text = result if result else "回合已结束，状态转换成功"
+                        if not result:
+                            self.reply_to_player(player_id, "回合已结束，状态转换成功")
+                        # 注意：如果result有值，handle_turn_transition内部会通过reply_to_player返回信息
                     else:
-                        response_text = "当前回合尚未完成，无法结束"
-                else:
-                    # 创建普通输入事件
-                    event_type = EventType.PLAYER_ACTION if text.startswith('/') else EventType.DM_NARRATION
-                    event = {
-                        'type': event_type,
-                        'player_id': player_id,
-                        'content': text
-                    }
-                    response_text = "内容已记录"
-                    
-                    try:
-                        # 处理事件
-                        result = self.game_match.process_event(event)
-                        if result:  # 如果事件处理返回了特定结果
-                            response_text = result
-                        
-                        self.logger.info(f"处理事件：玩家ID：{player_id} 事件类型：{event_type} 响应：{response_text}")
+                        self.reply_to_player(player_id, "当前回合尚未完成，无法结束")
 
-                    except LLMTimeoutError:
-                        response_text = "大模型请求超时，请稍后再试"
-                        self.logger.warning(f"大模型请求超时：玩家ID：{player_id} 行动内容：{text}")
-                    except PlayerTimeoutError:
-                        response_text = "玩家输入超时，跳过本轮"
-                        self.logger.warning(f"玩家输入超时：玩家ID：{player_id} 行动内容：{text}")
+            # 不是以/开头，视为普通消息（DM叙述）
+            else:
+                # 创建玩家行动事件
+                event = {
+                    'type': EventType.PLAYER_ACTION,
+                    'player_id': player_id,
+                    'content': text
+                }
+                
+                try:
+                    # 处理事件
+                    self.game_match.process_event(event)
+                    # process_event内部会通过相应的handler处理事件，并在需要时调用reply_to_player
+                    
+                    self.logger.info(f"处理事件：玩家ID：{player_id} 事件类型：{EventType.PLAYER_ACTION}")
+
+                except LLMTimeoutError:
+                    self.reply_to_player(player_id, "大模型请求超时，请稍后再试")
+                    self.logger.warning(f"大模型请求超时：玩家ID：{player_id} 行动内容：{text}")
+                except PlayerTimeoutError:
+                    self.reply_to_player(player_id, "玩家输入超时，跳过本轮")
+                    self.logger.warning(f"玩家输入超时：玩家ID：{player_id} 行动内容：{text}")
         except Exception as e:
             self.logger.error(f"处理玩家行动时出错: {str(e)}", exc_info=True)
-            response_text = "游戏系统出现错误，请联系管理员"
+            self.reply_to_player(player_id, "游戏系统出现错误，请联系管理员")
 
-        # 回复玩家
-        self.reply_to_player(response_text, incoming_message)
+        # 不再需要在这里强制回复，因为所有需要回复的场景都已经通过reply_to_player处理了
         return AckMessage.STATUS_OK, 'OK'
 
 if __name__ == "__main__":
