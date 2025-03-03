@@ -8,6 +8,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 class TurnHandler(ABC):
+    # 声明关注的事件类型，子类必须覆盖此属性
+    event_types: List[str] = []
+    
     def __init__(self) -> None:
         self.context: Dict[str, Any] = {}  # 存储所有回合相关信息
 
@@ -30,7 +33,15 @@ class TurnHandler(ABC):
         # 清理资源，执行回合结束时的操作
         logger.debug(f"{self.__class__.__name__} 结束当前回合")
 
-    @abstractmethod
     def handle_event(self, event: Dict[str, Any]) -> None:
-        """处理事件"""
+        """处理事件，只处理关注的事件类型"""
+        event_type = event.get('type')
+        
+        # 只处理关注的事件类型
+        if event_type in self.event_types:
+            self._process_event(event)
+        
+    @abstractmethod
+    def _process_event(self, event: Dict[str, Any]) -> None:
+        """处理具体的事件，子类必须实现此方法"""
         pass

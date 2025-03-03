@@ -1,19 +1,23 @@
 from ai.chains.story_gen import TurnProcessingChain
 from game.turn_system.base_handler import TurnHandler
-from game.state.models import TurnType, Player, TurnStatus, InvalidTurnOperation
+from game.state.models import TurnType, Player, TurnStatus, InvalidTurnOperation, EventType
 from typing import List, Dict, Any
 import logging
 
 logger = logging.getLogger(__name__)
 
 class DMTurnHandler(TurnHandler):
+    # 明确声明关注的事件类型
+    event_types: List[str] = [EventType.DM_NARRATION]
+    
     def __init__(self) -> None:
         super().__init__()
 
-    def handle_event(self, event: Dict[str, Any]) -> None:
+    def _process_event(self, event: Dict[str, Any]) -> None:
+        """处理DM相关事件"""
         event_type = event.get('type')
         
-        if event_type == 'dm_narration':
+        if event_type == EventType.DM_NARRATION:
             narration = event.get('content')
             
             current_turn = self.get_current_turn()

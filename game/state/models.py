@@ -24,6 +24,11 @@ class TurnType(str, Enum):
     DM = "DM"
     PLAYER = "PLAYER"
 
+class EventType(str, Enum):
+    """事件类型枚举"""
+    PLAYER_ACTION = "player_action"
+    DM_NARRATION = "dm_narration"
+
 class TurnStatus(str, Enum):
     PENDING = "PENDING"
     COMPLETED = "COMPLETED"

@@ -1,18 +1,22 @@
 from game.turn_system.base_handler import TurnHandler
-from game.state.models import TurnType, Player, InvalidTurnOperation, TurnStatus
+from game.state.models import TurnType, Player, InvalidTurnOperation, TurnStatus, EventType
 from typing import List, Dict, Any
 import logging
 
 logger = logging.getLogger(__name__)
 
 class PlayerTurnHandler(TurnHandler):
+    # 明确声明关注的事件类型
+    event_types: List[str] = [EventType.PLAYER_ACTION]
+    
     def __init__(self) -> None:
         super().__init__()
 
-    def handle_event(self, event: Dict[str, Any]) -> None:
+    def _process_event(self, event: Dict[str, Any]) -> None:
+        """处理玩家相关事件"""
         event_type = event.get('type')
         
-        if event_type == 'player_action':
+        if event_type == EventType.PLAYER_ACTION:
             player_id = event.get('player_id')
             action = event.get('content')  # 统一使用content字段
             
@@ -87,7 +91,7 @@ if __name__ == "__main__":
     
     # 模拟玩家行动
     event = {
-        'type': 'player_action',
+        'type': EventType.PLAYER_ACTION,
         'player_id': 'alice_id',
         'content': '探索前方的道路'
     }

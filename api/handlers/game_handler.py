@@ -2,7 +2,7 @@ import logging
 from dingtalk_stream import ChatbotHandler, AckMessage, ChatbotMessage
 from game.turn_system.logic import GameMatchLogic
 from ai.chains.story_gen import LLMTimeoutError, PlayerTimeoutError
-from game.state.models import TurnType
+from game.state.models import TurnType, EventType
 
 class GameMessageHandler(ChatbotHandler):
     def __init__(self, game_match: GameMatchLogic, logger: logging.Logger = None) -> None:
@@ -24,7 +24,7 @@ class GameMessageHandler(ChatbotHandler):
         self.logger.info(f"接收到玩家输入：玩家ID：{player_id} 输入内容：{text}")
 
         try:
-            if text == "/开始游戏":
+            if text == "/开始游戏" or text == "/start":
                 if not self.game_match.current_room or not self.game_match.current_room.current_match:
                     self.game_match.start_match(scene="初始场景", players=[])
                     response_text = "游戏已开始，当前场景为：初始场景"
@@ -42,7 +42,7 @@ class GameMessageHandler(ChatbotHandler):
                         response_text = "当前回合尚未完成，无法结束"
                 else:
                     # 创建普通输入事件
-                    event_type = 'player_action' if text.startswith('/') else 'dm_narration'
+                    event_type = EventType.PLAYER_ACTION if text.startswith('/') else EventType.DM_NARRATION
                     event = {
                         'type': event_type,
                         'player_id': player_id,
