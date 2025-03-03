@@ -11,21 +11,25 @@ class PlayerTurnHandler(TurnHandler):
         super().__init__(game_logic)
 
     def handle_event(self, event: dict) -> bool:
-        if event.get('type') != 'player_action':
-            return False
-            
-        player_id = event.get('player_id')
-        action = event.get('action')
-        current_turn = self.game_logic.current_room.current_match.current_turn
+        event_type = event.get('type')
         
-        try:
-            current_turn.process_player_action(player_id, action)
-            # 检查是否所有玩家已提交
-            if current_turn.all_players_submitted():
-                self.set_needs_transition(True)
-                return True
-        except InvalidTurnOperation as e:
-            logger.error(f"非法操作: {str(e)}")
+        if event_type == 'player_action':
+            player_id = event.get('player_id')
+            action = event.get('content')  # 统一使用content字段
+            current_turn = self.game_logic.current_room.current_match.current_turn
+            
+            try:
+                current_turn.process_player_action(player_id, action)
+                # 不自动触发转换，即使所有玩家已提交
+                return False
+            except InvalidTurnOperation as e:
+                logger.error(f"非法操作: {str(e)}")
+                return False
+                
+        elif event_type == 'end_turn':
+            # 显式结束回合事件
+            self.set_needs_transition(True)
+            return True
             
         return False
 

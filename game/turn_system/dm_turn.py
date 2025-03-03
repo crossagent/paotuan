@@ -9,16 +9,20 @@ class DMTurnHandler(TurnHandler):
         super().__init__(game_logic)
 
     def handle_event(self, event: dict) -> bool:
-        if event.get('type') != 'dm_narration':
-            return False
-            
-        narration = event.get('content')
-        current_turn = self.game_logic.current_room.current_match.current_turn
-        current_turn.process_dm_turn(narration)
+        event_type = event.get('type')
         
-        # DM叙事完成后立即触发转换
-        self.set_needs_transition(True)
-        return True
+        if event_type == 'dm_narration':
+            narration = event.get('content')
+            current_turn = self.game_logic.current_room.current_match.current_turn
+            current_turn.process_dm_turn(narration)
+            return False  # 不自动触发转换
+            
+        elif event_type == 'end_turn':
+            # 显式结束回合事件
+            self.set_needs_transition(True)
+            return True
+            
+        return False
 
     def generate_narration(self) -> str:
         """生成并应用剧情叙述"""

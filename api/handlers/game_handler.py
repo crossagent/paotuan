@@ -30,17 +30,30 @@ class GameMessageHandler(ChatbotHandler):
                 else:
                     response_text = "当前已有进行中的游戏局，请等待当前游戏结束。"
             else:
-                # 创建事件对象并传递给GameMatch
-                event = {
-                    'type': 'player_action' if text.startswith('/') else 'dm_narration',
-                    'player_id': player_id,
-                    'content': text
-                }
-                try:
-                    response_text = self.game_match.process_event(event)
-                    self.logger.info(f"处理玩家行动：玩家ID：{player_id} 行动内容：{text} 响应：{response_text}")
+                # 判断是否为回合控制命令
+                if text == "/结束回合" or text == "/end":
+                    # 创建回合结束事件
+                    event = {
+                        'type': 'end_turn',
+                        'player_id': player_id
+                    }
+                    response_text = "回合已结束，等待状态转换"
+                else:
+                    # 创建普通输入事件
+                    event = {
+                        'type': 'player_action' if text.startswith('/') else 'dm_narration',
+                        'player_id': player_id,
+                        'content': text
+                    }
+                    response_text = "内容已记录"
                     
-                    # 通过GameMatch统一管理状态转换
+                try:
+                    # 处理事件
+                    result = self.game_match.process_event(event)
+                    if result:  # 如果事件处理返回了特定结果
+                        response_text = result
+                    
+                    self.logger.info(f"处理事件：玩家ID：{player_id} 事件类型：{event['type']} 响应：{response_text}")
 
                 except LLMTimeoutError:
                     response_text = "大模型请求超时，请稍后再试"

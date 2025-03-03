@@ -54,12 +54,19 @@ class GameMatchLogic:
         result = None
         transition_occurred = False
         
+        # 特殊处理强制转换事件
+        if event.get('type') == 'force_transition':
+            self.handle_turn_transition()
+            return "强制执行回合转换"
+        
+        # 分发事件到各个处理器
         for handler in self.handlers:
             if handler.handle_event(event):
                 transition_occurred = True
                 
+        # 仅当事件处理器明确请求转换时才执行
         if transition_occurred:
-            self.handle_turn_transition()
+            result = self.handle_turn_transition()
             
         return result
 
@@ -94,33 +101,6 @@ class GameMatchLogic:
         if self.current_room and self.current_room.current_match:
             return self.current_room.current_match.current_turn
         return None
-
-# 删除不需要的方法
-# def process_turn_action(self, player_id: str, action: str) -> str:
-#     ...
-
-# def _start_dm_turn(self, current_match: Match):
-#     ...
-
-# def _start_player_turn(self, current_match: Match):
-#     ...
-
-# 新增异常类
-class PlayerTimeoutError(Exception):
-    """玩家操作超时异常"""
-
-class InvalidGameOperation(Exception):
-    """非法游戏操作异常"""
-
-# 删除不需要的方法
-# def process_turn_action(self, player_id: str, action: str) -> str:
-#     ...
-
-# def _start_dm_turn(self, current_match: Match):
-#     ...
-
-# def _start_player_turn(self, current_match: Match):
-#     ...
 
 # 新增异常类
 class PlayerTimeoutError(Exception):
