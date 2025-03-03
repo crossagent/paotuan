@@ -6,6 +6,8 @@ from langchain.memory import ConversationBufferMemory
 import os
 import yaml
 import logging  # 添加此行以导入logging模块
+from typing import List, Dict, Any
+from game.state.models import Match
 
 # 自定义异常类
 class LLMTimeoutError(Exception):
@@ -82,13 +84,15 @@ story_chain = _build_story_chain()
 action_chain = _build_action_chain()
 
 class TurnProcessingChain:
-    def process_dm_turn(self, state, players):
-        current_round = state.current_room.current_round
+    def process_dm_turn(self, match: Match, players: List[str]):
+        current_match = match
+        current_scene = current_match.scene
+        story_history = getattr(match, 'story_history', [])
         
         context = {
-            "current_scene": current_round.scene,
+            "current_scene": current_scene,
             "players": ", ".join(players),
-            "history": "\n".join(current_round.story_history[-history_length:])  # 使用配置的历史记录长度
+            "history": "\n".join(story_history[-history_length:])  # 使用配置的历史记录长度
         }
         
         try:
@@ -99,7 +103,9 @@ class TurnProcessingChain:
                 {"input": context["current_scene"]},
                 {"output": narration}
             )
-            current_round.story_history.append(narration)
+            if not hasattr(current_match, 'story_history'):
+                current_match.story_history = []
+            current_match.story_history.append(narration)
             
             return {
                 "narration": narration,

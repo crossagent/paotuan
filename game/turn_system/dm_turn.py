@@ -1,6 +1,7 @@
 from ai.chains.story_gen import TurnProcessingChain
 from game.turn_system.base_handler import TurnHandler
 from game.state.models import TurnType, Player, TurnStatus, InvalidTurnOperation, EventType
+from game.state.models import Turn, Match
 from typing import List, Dict, Any
 import logging
 
@@ -54,7 +55,17 @@ class DMTurnHandler(TurnHandler):
         self.process_dm_turn(result["narration"])
         
         return result["narration"]
+
+    def on_enter_turn(self, turn: 'Turn', players: List['Player'], match: 'Match') -> None:
+        """当进入新回合时调用"""
+        super().on_enter_turn(turn, players, match)
         
+        # 给自己发送一个EventType.DM_NARRATION的事件
+        event = {
+            'type': EventType.DM_NARRATION
+        }
+        self._process_event(event)
+
     def on_finish_turn(self) -> None:
         """DM回合结束时，设置下一个回合的信息"""
         # 清理资源，执行回合结束时的操作
@@ -92,14 +103,15 @@ if __name__ == "__main__":
     
     game_logic = GameMatchLogic()
     game_logic.create_room("test_room")
-    player1 = Player(name="Alice", id="alice_id")
-    player2 = Player(name="Bob", id="bob_id")
     
     handler = DMTurnHandler()
     game_logic.add_handler(handler)
     
+    game_logic.add_player('alice_id', 'Alice')
+    game_logic.add_player('bob_id', 'Bob')
+
     # 开始比赛
-    game_logic.start_match("初始场景", [player1, player2])
+    game_logic.start_game(scene="初始场景")
     
     # 生成DM叙述
     narration = handler.generate_narration()

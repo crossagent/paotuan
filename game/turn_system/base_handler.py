@@ -1,9 +1,7 @@
 from abc import ABC, abstractmethod
 import logging
 from typing import Dict, Any, Optional, TYPE_CHECKING, List
-
-if TYPE_CHECKING:
-    from game.state.models import Turn, Player, Match
+from game.state.models import Turn, Player, Match
 
 logger = logging.getLogger(__name__)
 
