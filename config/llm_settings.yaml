@@ -1,6 +1,6 @@
 # LLM配置
-openai_api_key: "YOUR_ACTUAL_API_KEY"  # 请替换为您的OpenAI API密钥
-model: "gpt-3.5-turbo"
+google_api_key: "AIzaSyDxqCA3kmFZPygRszaNYzQ8AYXy19vFDhA"  # 请替换为您的Google API密钥
+model: "gemini-pro"
 temperature: 0.7
 max_tokens: 150
-history_length: 50  # 新增配置项：历史记录长度
+history_length: 50  # 历史记录长度

@@ -1,12 +1,10 @@
 from abc import ABC, abstractmethod
-from ..state.models import GameMatch
 import logging
 
 logger = logging.getLogger(__name__)
 
 class TurnHandler(ABC):
-    def __init__(self, game_logic: GameMatch):
-        self.game_logic = game_logic
+    def __init__(self):
         self._needs_transition = False
 
     @abstractmethod
