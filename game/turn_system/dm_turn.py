@@ -68,7 +68,7 @@ class DMTurnHandler(TurnHandler):
         # 设置下一个回合的类型为玩家回合
         current_turn.next_turn_info['turn_type'] = TurnType.PLAYER
         
-        logger.info(f"DM回合结束，下一回合为玩家回合")
+        logger.info("DM回合结束，下一回合为玩家回合")
 
     def request_next_player_turn(self, players: List[str]) -> None:
         """请求下一个玩家回合并设置激活玩家"""

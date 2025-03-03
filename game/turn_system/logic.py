@@ -1,8 +1,9 @@
-from ..state.models import Match, Room, Turn, InvalidTurnOperation, TurnType, TurnStatus, Player
+from ..state.models import Match, Room, Turn, TurnType, Player
 from typing import Optional, List, Dict, Any
 import logging
 from .base_handler import TurnHandler
 from .dm_turn import DMTurnHandler
+from .player_turn import PlayerTurnHandler  # 新增导入
 
 logger = logging.getLogger(__name__)
 
@@ -12,6 +13,10 @@ class GameMatchLogic:
         self.handlers: List[TurnHandler] = []
         self.players: List[Player] = []  # 管理玩家列表
         self.message_callback = None  # 新增：消息回调函数
+        
+        # 初始化并添加回合处理器
+        self.add_handler(DMTurnHandler())
+        self.add_handler(PlayerTurnHandler())
 
     def set_message_callback(self, callback) -> None:
         """设置消息回调函数，用于向钉钉发送消息"""
@@ -35,12 +40,30 @@ class GameMatchLogic:
         room.current_match = new_match
         logger.info(f"开始新游戏局，场景：{scene} 房间ID：{room.room_id}")
 
-    def add_player(self, room: Room, player: Player) -> None:
-        """向房间添加玩家"""
-        room.players.append(player)
-        if room.current_match and room.current_match.current_turn:
-            room.current_match.current_turn.active_players.append(player.id)
-            logger.debug(f"玩家{player.name}加入房间，当前回合ID：{room.current_match.current_turn.turn_id}")
+    def add_player(self, player_id: str, player_name: str) -> None:
+        """向当前房间添加玩家，只能在创建房间后、开始比赛前添加"""
+        if not self.current_room:
+            raise InvalidGameOperation("请先创建房间")
+        
+        # 检查是否已经开始比赛
+        if self.current_room.current_match:
+            raise InvalidGameOperation("游戏已经开始，无法加入新玩家")
+            
+        # 检查玩家是否已经在房间中
+        for existing_player in self.current_room.players:
+            if existing_player.id == player_id:
+                logger.info(f"玩家已在房间中：{player_id}")
+                return
+                
+        # 创建新玩家并添加到房间
+        new_player = Player(id=player_id, name=player_name)
+        self.current_room.players.append(new_player)
+        
+        logger.info(f"玩家{player_name}(ID:{player_id})加入房间")
+        
+        # 通知玩家已加入
+        if self.message_callback:
+            self.message_callback(player_id, f"你已成功加入房间：{self.current_room.room_id}")
 
     # ===== 从Match类移出的方法 =====
     def start_new_turn(self, match: Match, turn_type: TurnType) -> Turn:
@@ -107,6 +130,31 @@ class GameMatchLogic:
     # ===== 从Turn类移出的方法 =====
     # 这些方法已移动到对应的TurnHandler类中
 
+    # ===== 新增方法 =====
+    def start_game(self, scene: str) -> None:
+        """使用当前房间中的玩家开始新游戏"""
+        if not self.current_room:
+            raise InvalidGameOperation("请先创建房间")
+        if self.current_room.current_match:
+            raise InvalidGameOperation("当前已有进行中的比赛")
+        if not self.current_room.players:
+            raise InvalidGameOperation("房间中没有玩家，无法开始游戏")
+            
+        # 创建新比赛
+        self.create_new_match(self.current_room, scene)
+            
+        # 直接开始一个DM回合
+        if self.current_room.current_match:
+            # 创建DM回合
+            self.start_new_turn(self.current_room.current_match, TurnType.DM)
+            logger.info("比赛开始，创建初始DM回合")
+            
+            # 通知所有玩家游戏开始
+            for player in self.current_room.players:
+                self.reply_to_player(player.id, f"游戏已开始，当前场景为：{scene}")
+                
+        logger.info(f"比赛开始 场景：{scene} 玩家数：{len(self.current_room.players)}")
+
     # ===== 原有方法修改 =====
     def destroy_room(self) -> None:
         """销毁当前房间"""
@@ -114,26 +162,6 @@ class GameMatchLogic:
             self.end_match()
         self.current_room = None
         logger.info("房间已销毁")
-
-    def start_match(self, scene: str, players: List[Player]) -> None:
-        """开始新比赛"""
-        if not self.current_room:
-            raise InvalidGameOperation("请先创建房间")
-        if self.current_room.current_match:
-            raise InvalidGameOperation("当前已有进行中的比赛")
-            
-        self.create_new_match(self.current_room, scene)
-        self.players = players
-        for player in players:
-            self.add_player(self.current_room, player)
-            
-        # 直接开始一个DM回合
-        if self.current_room.current_match:
-            # 创建DM回合
-            self.start_new_turn(self.current_room.current_match, TurnType.DM)
-            logger.info(f"比赛开始，创建初始DM回合")
-                
-        logger.info(f"比赛开始 场景：{scene} 玩家数：{len(players)}")
 
     def end_match(self) -> None:
         """结束当前比赛"""

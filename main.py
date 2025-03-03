@@ -44,9 +44,9 @@ def main():
     options = define_options()
 
     # 创建游戏状态实例并初始化房间
-    game_state = GameMatchLogic()
+    game_logic = GameMatchLogic()
 
-    game_state.create_room("测试房间")
+    game_logic.create_room("测试房间")
 
     logger.info("游戏初始化完成，等待玩家指令以开始游戏。")
 
@@ -54,7 +54,7 @@ def main():
     client = DingTalkStreamClient(credential)
     client.register_callback_handler(
         ChatbotMessage.TOPIC, 
-        GameMessageHandler(game_state, logger)  # 传入游戏状态
+        GameMessageHandler(game_logic, logger)  # 传入游戏状态
     )
 
     # 初始化完成后等待玩家输入触发回合流程
