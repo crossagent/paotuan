@@ -46,7 +46,7 @@ def main():
     # 创建游戏状态实例并初始化房间
     game_state = GameMatchLogic()
 
-    game_state.create_room("初始场景")
+    game_state.create_room("测试房间")
 
     logger.info("游戏初始化完成，等待玩家指令以开始游戏。")
 
