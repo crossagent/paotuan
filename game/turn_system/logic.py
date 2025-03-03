@@ -20,7 +20,7 @@ class GameMatchLogic:
 
     def set_message_callback(self, callback) -> None:
         """设置消息回调函数，用于向钉钉发送消息"""
-        self.message_callback = callback
+        self.message_callback = callback  # 使用 reply_to_player
 
     def add_handler(self, handler: TurnHandler) -> None:
         self.handlers.append(handler)

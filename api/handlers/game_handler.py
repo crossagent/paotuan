@@ -10,22 +10,29 @@ class GameMessageHandler(ChatbotHandler):
         self.game_match = game_match  # 引用游戏状态
         self.logger = logger if logger else logging.getLogger(__name__)
         
+        # 添加玩家消息映射字典
+        self.player_messages = {}
+        
         # 设置消息回调，让 GameMatchLogic 可以主动发送消息
         self.game_match.set_message_callback(self.reply_to_player)
-
+    
     def reply_to_player(self, player_id: str, message: str) -> None:
-        """向指定玩家发送消息"""
-        self.logger.info(f"回复玩家 {player_id}: {message}")
-        # 实现实际的消息发送逻辑
-        # 获取对应的 incoming_message 或使用缓存的 session_webhook
-        # 然后调用钉钉 API 发送消息
-        # 这里可以添加实际的发送逻辑代码
+        """通过玩家ID发送消息"""
+        if player_id in self.player_messages:
+            incoming_message = self.player_messages[player_id]
+            self.reply_text(message, incoming_message)
+            self.logger.info(f"通过ID回复玩家 {player_id}: {message}")
+        else:
+            self.logger.warning(f"无法回复玩家 {player_id}，找不到对应的消息上下文")
 
     async def process(self, callback: any) -> tuple[str, str]:
         incoming_message = ChatbotMessage.from_dict(callback.data)
         text = incoming_message.text.content.strip()
         player_id = incoming_message.sender_staff_id
         player_name = incoming_message.sender_nick  # 获取玩家昵称
+
+        # 保存玩家最新消息
+        self.player_messages[player_id] = incoming_message
 
         self.logger.info(f"接收到玩家输入：玩家ID：{player_id} 输入内容：{text}")
 
@@ -96,7 +103,7 @@ class GameMessageHandler(ChatbotHandler):
             response_text = "游戏系统出现错误，请联系管理员"
 
         # 回复玩家
-        self.reply_to_player(player_id, response_text)
+        self.reply_to_player(response_text, incoming_message)
         return AckMessage.STATUS_OK, 'OK'
 
 if __name__ == "__main__":
