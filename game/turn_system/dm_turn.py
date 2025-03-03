@@ -1,66 +1,84 @@
 from ai.chains.story_gen import TurnProcessingChain
 from game.turn_system.base_handler import TurnHandler
-from game.turn_system.logic import GameMatchLogic
-from game.state.models import TurnType, Player
-from typing import List
+from game.state.models import TurnType, Player, TurnStatus, InvalidTurnOperation
+from typing import List, Dict, Any
+import logging
+
+logger = logging.getLogger(__name__)
 
 class DMTurnHandler(TurnHandler):
-    def __init__(self, game_logic: GameMatchLogic):
-        super().__init__(game_logic)
+    def __init__(self) -> None:
+        super().__init__()
 
-    def handle_event(self, event: dict) -> bool:
+    def handle_event(self, event: Dict[str, Any]) -> None:
         event_type = event.get('type')
         
         if event_type == 'dm_narration':
             narration = event.get('content')
-            current_turn = self.game_logic.current_room.current_match.current_turn
-            current_turn.process_dm_turn(narration)
-            return False  # 不自动触发转换
             
-        elif event_type == 'end_turn':
-            # 显式结束回合事件
-            self.set_needs_transition(True)
-            return True
+            if not self.current_turn:
+                logger.error("当前回合未初始化")
+                return
+                
+            self.process_dm_turn(narration)
+    
+    def process_dm_turn(self, narration: str) -> None:
+        """处理DM叙事（仅限DM回合）"""
+        if not self.current_turn:
+            logger.error("当前回合未初始化")
+            return
             
-        return False
+        if self.current_turn.turn_type != TurnType.DM:
+            raise InvalidTurnOperation("非DM回合不能处理叙事")
+            
+        self.current_turn.actions["dm_narration"] = narration
+        self.current_turn.status = TurnStatus.COMPLETED
 
     def generate_narration(self) -> str:
         """生成并应用剧情叙述"""
-        current_match = self.game_logic.current_room.current_match
-        players = [p.name for p in self.game_logic.current_room.players]
+        if not self.current_turn or 'match' not in self.context:
+            logger.error("当前回合或比赛上下文未初始化")
+            return "错误：回合未初始化"
+            
+        current_match = self.context['match']
+        players = [p.name for p in self.context.get('players', [])]
 
         result = TurnProcessingChain().process_dm_turn(current_match, players)
-        current_match.current_turn.process_dm_turn(result["narration"])
+        self.process_dm_turn(result["narration"])
         
-        self.set_needs_transition(True)
         return result["narration"]
 
-    def update(self):
-        """更新DM回合状态"""
-        if self.needs_transition:
-            self.game_logic.handle_turn_transition()
-            self.set_needs_transition(False)
-
-    def activate_players(self, players: List[str]):
-        """设置下一回合激活玩家"""
-        current_match = self.game_logic.current_room.current_match
-        current_match.start_new_turn(TurnType.PLAYER)
-        current_match.current_turn.active_players = players
+    def request_next_player_turn(self, players: List[str]) -> None:
+        """请求下一个玩家回合并设置激活玩家"""
+        if not self.current_turn:
+            logger.error("当前回合未初始化")
+            return
+            
+        # 只设置状态，不直接调用game_logic
+        self.current_turn.status = TurnStatus.COMPLETED
+        # 在context中存储下一回合需要激活的玩家
+        self.context['next_active_players'] = players
+        logger.info(f"DM回合完成，请求下一回合激活玩家: {players}")
 
 # 示例使用
 if __name__ == "__main__":
-    game_logic = GameMatchLogic()
-    game_logic.start_new_round("初始场景")
-    player1 = Player(name="Alice")
-    player2 = Player(name="Bob")
-    game_logic.current_room.add_player(player1)
-    game_logic.current_room.add_player(player2)
+    from game.turn_system.logic import GameMatchLogic
     
-    handler = DMTurnHandler(game_logic)
+    game_logic = GameMatchLogic()
+    game_logic.create_room("test_room")
+    player1 = Player(name="Alice", id="alice_id")
+    player2 = Player(name="Bob", id="bob_id")
+    
+    handler = DMTurnHandler()
     game_logic.add_handler(handler)
+    
+    # 开始比赛
+    game_logic.start_match("初始场景", [player1, player2])
+    
+    # 生成DM叙述
     narration = handler.generate_narration()
     print("DM生成的剧情:", narration)
     
-    # 激活下一轮玩家
-    handler.activate_players(["Alice", "Bob"])
-    print("已激活玩家：", handler.game_logic.current_room.current_match.current_turn.active_players)
+    # 请求下一轮玩家回合
+    handler.request_next_player_turn(["alice_id", "bob_id"])
+    print("已请求激活玩家：", handler.context.get('next_active_players', []))

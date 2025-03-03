@@ -1,47 +1,139 @@
-from ..state.models import Match, Room, Turn, InvalidTurnOperation, TurnType, Player  # 添加Player类的导入
-from typing import Optional, List  # 添加此行以导入List类型
+from ..state.models import Match, Room, Turn, InvalidTurnOperation, TurnType, TurnStatus, Player
+from typing import Optional, List, Dict, Any
 import logging
 from .base_handler import TurnHandler
+from .dm_turn import DMTurnHandler
 
 logger = logging.getLogger(__name__)
 
 class GameMatchLogic:
-    def __init__(self):
+    def __init__(self) -> None:
         self.current_room: Optional[Room] = None
         self.handlers: List[TurnHandler] = []
         self.players: List[Player] = []  # 管理玩家列表
 
-    def add_handler(self, handler: TurnHandler):
+    def add_handler(self, handler: TurnHandler) -> None:
         self.handlers.append(handler)
 
-    def create_room(self, room_id: str):
+    # ===== 从Room类移出的方法 =====
+    def create_room(self, room_id: str) -> None:
         """创建新房间"""
         if self.current_room:
             raise InvalidGameOperation("已有活跃房间")
         self.current_room = Room(room_id=room_id)
         logger.info(f"房间已创建：{room_id}")
 
-    def destroy_room(self):
+    def create_new_match(self, room: Room, scene: str) -> None:
+        """为房间创建新比赛"""
+        new_match = Match(match_id=len(room.history) + 1, scene=scene)
+        room.history.append(new_match)
+        room.current_match = new_match
+        logger.info(f"开始新游戏局，场景：{scene} 房间ID：{room.room_id}")
+
+    def add_player(self, room: Room, player: Player) -> None:
+        """向房间添加玩家"""
+        room.players.append(player)
+        if room.current_match and room.current_match.current_turn:
+            room.current_match.current_turn.active_players.append(player.id)
+            logger.debug(f"玩家{player.name}加入房间，当前回合ID：{room.current_match.current_turn.turn_id}")
+
+    # ===== 从Match类移出的方法 =====
+    def start_new_turn(self, match: Match, turn_type: TurnType) -> Turn:
+        """开始新回合"""
+        new_turn = Turn(turn_id=len(match.turns) + 1, turn_type=turn_type)
+        match.turns.append(new_turn)
+        match.current_turn = new_turn
+        logger.debug(f"开始新回合，类型：{turn_type} 回合ID：{new_turn.turn_id}")
+        
+        # 通知处理器新回合开始
+        if self.current_room:
+            for handler in self.handlers:
+                handler.on_enter_turn(new_turn, self.current_room.players, match)
+                
+        return new_turn
+
+    def end_current_turn(self, match: Match) -> None:
+        """结束当前回合"""
+        if match.current_turn and match.current_turn.is_completed():
+            # 通知处理器回合结束
+            for handler in self.handlers:
+                handler.on_finish_turn()
+                
+            logger.info(f"结束当前回合，回合ID：{len(match.turns)}")
+            match.current_turn = None
+
+    def handle_turn_transition(self) -> Optional[str]:
+        """处理回合状态转换"""
+        if not self.current_room or not self.current_room.current_match:
+            logger.warning("当前没有正在进行的比赛")
+            return None
+            
+        current_match = self.current_room.current_match
+        
+        # 检查当前回合是否已完成
+        if current_match.current_turn and current_match.current_turn.is_completed():
+            # 保存当前回合类型，因为end_current_turn会将current_turn设为None
+            current_turn_type = current_match.current_turn.turn_type
+            
+            # 结束当前回合（会通知处理器回合结束）
+            self.end_current_turn(current_match)
+            
+            # 根据当前回合类型创建新回合
+            if current_turn_type == TurnType.PLAYER:
+                # 玩家回合结束→创建DM回合
+                self.start_new_turn(current_match, TurnType.DM)
+                logger.info(f"回合转换成功，新回合类型：{TurnType.DM}")
+            elif current_turn_type == TurnType.DM:
+                # DM回合结束→创建玩家回合
+                new_turn = self.start_new_turn(current_match, TurnType.PLAYER)
+                
+                # 从DM处理器的context中获取下一回合激活玩家
+                for handler in self.handlers:
+                    if isinstance(handler, DMTurnHandler) and 'next_active_players' in handler.context:
+                        new_turn.active_players = handler.context['next_active_players']
+                        break
+                        
+                logger.info(f"回合转换成功，新回合类型：{TurnType.PLAYER}，激活玩家：{new_turn.active_players}")
+            
+            # start_new_turn已经通知处理器，这里不需要重复通知
+            self._notify_players_of_next_turn()
+            return "回合转换成功"
+        else:
+            logger.warning("回合转换条件未满足")
+            return None
+
+    # ===== 从Turn类移出的方法 =====
+    # 这些方法已移动到对应的TurnHandler类中
+
+    # ===== 原有方法修改 =====
+    def destroy_room(self) -> None:
         """销毁当前房间"""
         if self.current_room and self.current_room.current_match:
             self.end_match()
         self.current_room = None
         logger.info("房间已销毁")
 
-    def start_match(self, scene: str, players: List[Player]):
+    def start_match(self, scene: str, players: List[Player]) -> None:
         """开始新比赛"""
         if not self.current_room:
             raise InvalidGameOperation("请先创建房间")
         if self.current_room.current_match:
             raise InvalidGameOperation("当前已有进行中的比赛")
             
-        self.current_room.create_new_match(scene)
+        self.create_new_match(self.current_room, scene)
         self.players = players
         for player in players:
-            self.current_room.add_player(player)
+            self.add_player(self.current_room, player)
+            
+        # 直接开始一个DM回合
+        if self.current_room.current_match:
+            # 创建DM回合
+            self.start_new_turn(self.current_room.current_match, TurnType.DM)
+            logger.info(f"比赛开始，创建初始DM回合")
+                
         logger.info(f"比赛开始 场景：{scene} 玩家数：{len(players)}")
 
-    def end_match(self):
+    def end_match(self) -> None:
         """结束当前比赛"""
         if not self.current_room or not self.current_room.current_match:
             raise InvalidGameOperation("没有进行中的比赛")
@@ -49,41 +141,20 @@ class GameMatchLogic:
         self.current_room.current_match = None
         logger.info("比赛已结束")
 
-    def process_event(self, event: dict):
+    def process_event(self, event: Dict[str, Any]) -> Optional[str]:
         """统一处理游戏事件"""
-        result = None
-        transition_occurred = False
-        
-        # 特殊处理强制转换事件
-        if event.get('type') == 'force_transition':
-            self.handle_turn_transition()
-            return "强制执行回合转换"
-        
         # 分发事件到各个处理器
         for handler in self.handlers:
-            if handler.handle_event(event):
-                transition_occurred = True
-                
-        # 仅当事件处理器明确请求转换时才执行
-        if transition_occurred:
-            result = self.handle_turn_transition()
+            handler.handle_event(event)
             
-        return result
-
-    def handle_turn_transition(self):
-        """显式处理回合状态转换"""
-        if not self.current_room or not self.current_room.current_match:
-            logger.warning("当前没有正在进行的比赛")
-            return
+        # 检查当前回合是否已完成，如果已完成则执行回合转换
+        current_turn = self.get_current_turn()
+        if current_turn and current_turn.is_completed():
+            return self.handle_turn_transition()
             
-        current_match = self.current_room.current_match
-        if current_match.handle_turn_transition():
-            logger.info(f"回合转换成功，新回合类型：{current_match.current_turn.turn_type}")
-            self._notify_players_of_next_turn()
-        else:
-            logger.warning("回合转换条件未满足")
+        return None
 
-    def _notify_players_of_next_turn(self):
+    def _notify_players_of_next_turn(self) -> None:
         """通知所有玩家进入下一轮"""
         next_turn = self.get_current_turn()
         if next_turn and next_turn.turn_type == TurnType.PLAYER:
@@ -91,7 +162,7 @@ class GameMatchLogic:
             for player in self.current_room.players:
                 self.reply_to_player(player.id, "新的玩家回合已开始，请提交你的行动")
 
-    def reply_to_player(self, player_id: str, message: str):
+    def reply_to_player(self, player_id: str, message: str) -> None:
         """发送消息给指定玩家"""
         # 实现具体的发送逻辑（例如通过钉钉API）
         logger.info(f"回复玩家 {player_id}: {message}")
@@ -102,7 +173,7 @@ class GameMatchLogic:
             return self.current_room.current_match.current_turn
         return None
 
-# 新增异常类
+# 异常类
 class PlayerTimeoutError(Exception):
     """玩家操作超时异常"""
 
