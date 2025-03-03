@@ -72,32 +72,29 @@ class GameMatchLogic:
         
         # 检查当前回合是否已完成
         if current_match.current_turn and current_match.current_turn.is_completed():
-            # 保存当前回合类型，因为end_current_turn会将current_turn设为None
-            current_turn_type = current_match.current_turn.turn_type
+            # 获取当前回合和下一个回合的信息
+            current_turn = current_match.current_turn
+            next_turn_info = current_turn.next_turn_info
             
-            # 结束当前回合（会通知处理器回合结束）
+            # 结束当前回合
             self.end_current_turn(current_match)
             
-            # 根据当前回合类型创建新回合
-            if current_turn_type == TurnType.PLAYER:
-                # 玩家回合结束→创建DM回合
-                self.start_new_turn(current_match, TurnType.DM)
-                logger.info(f"回合转换成功，新回合类型：{TurnType.DM}")
-            elif current_turn_type == TurnType.DM:
-                # DM回合结束→创建玩家回合
-                new_turn = self.start_new_turn(current_match, TurnType.PLAYER)
+            # 创建下一个回合
+            if 'turn_type' in next_turn_info:
+                new_turn = self.start_new_turn(current_match, next_turn_info['turn_type'])
                 
-                # 从DM处理器的context中获取下一回合激活玩家
-                for handler in self.handlers:
-                    if isinstance(handler, DMTurnHandler) and 'next_active_players' in handler.context:
-                        new_turn.active_players = handler.context['next_active_players']
-                        break
-                        
-                logger.info(f"回合转换成功，新回合类型：{TurnType.PLAYER}，激活玩家：{new_turn.active_players}")
-            
-            # start_new_turn已经通知处理器，这里不需要重复通知
-            self._notify_players_of_next_turn()
-            return "回合转换成功"
+                # 设置激活玩家（如果有）
+                if 'active_players' in next_turn_info:
+                    new_turn.active_players = next_turn_info['active_players']
+                
+                logger.info(f"回合转换成功，新回合类型：{next_turn_info['turn_type']}，激活玩家：{new_turn.active_players}")
+                
+                # 通知玩家
+                self._notify_players_of_next_turn()
+                return "回合转换成功"
+            else:
+                logger.warning("未指定下一个回合类型")
+                return None
         else:
             logger.warning("回合转换条件未满足")
             return None

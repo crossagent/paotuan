@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from enum import Enum
 import logging
 
@@ -34,6 +34,7 @@ class Turn(BaseModel):
     actions: Dict[str, str] = {}
     status: TurnStatus = TurnStatus.PENDING
     active_players: List[str] = []
+    next_turn_info: Dict[str, Any] = {}  # 存储下一个回合的信息，如类型、激活玩家等
 
     def is_completed(self) -> bool:
         """检查回合是否已完成"""

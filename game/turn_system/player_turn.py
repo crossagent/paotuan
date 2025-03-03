@@ -16,7 +16,8 @@ class PlayerTurnHandler(TurnHandler):
             player_id = event.get('player_id')
             action = event.get('content')  # 统一使用content字段
             
-            if not self.current_turn:
+            current_turn = self.get_current_turn()
+            if not current_turn:
                 logger.error("当前回合未初始化")
                 return
             
@@ -28,31 +29,47 @@ class PlayerTurnHandler(TurnHandler):
     
     def process_player_action(self, player_id: str, action: str) -> None:
         """处理玩家行动（仅限玩家回合）"""
-        if not self.current_turn:
+        current_turn = self.get_current_turn()
+        if not current_turn:
             logger.error("当前回合未初始化")
             return
             
-        if self.current_turn.turn_type != TurnType.PLAYER:
+        if current_turn.turn_type != TurnType.PLAYER:
             raise InvalidTurnOperation("非玩家回合不能处理玩家行动")
             
-        if player_id not in self.current_turn.active_players:
+        if player_id not in current_turn.active_players:
             raise InvalidTurnOperation("当前玩家不在激活列表中")
             
-        self.current_turn.actions[player_id] = action
+        current_turn.actions[player_id] = action
         logger.info(f"玩家{player_id}提交动作：{action}")
         
         # 仅在全部提交时标记完成
         if self.all_players_submitted():
-            self.current_turn.status = TurnStatus.COMPLETED
-            logger.info(f"玩家回合{self.current_turn.turn_id}已完成所有提交")
+            current_turn.status = TurnStatus.COMPLETED
+            logger.info(f"玩家回合{current_turn.turn_id}已完成所有提交")
     
     def all_players_submitted(self) -> bool:
         """检查所有玩家提交（仅限玩家回合）"""
-        if not self.current_turn:
+        current_turn = self.get_current_turn()
+        if not current_turn:
             return False
             
-        return self.current_turn.turn_type == TurnType.PLAYER and \
-               set(self.current_turn.actions.keys()) == set(self.current_turn.active_players)
+        return current_turn.turn_type == TurnType.PLAYER and \
+               set(current_turn.actions.keys()) == set(current_turn.active_players)
+               
+    def on_finish_turn(self) -> None:
+        """玩家回合结束时，设置下一个回合的信息"""
+        # 清理资源，执行回合结束时的操作
+        super().on_finish_turn()
+        
+        current_turn = self.get_current_turn()
+        if not current_turn:
+            logger.error("当前回合未初始化")
+            return
+        
+        # 设置下一个回合的类型为DM回合
+        current_turn.next_turn_info['turn_type'] = TurnType.DM
+        logger.info("玩家回合结束，下一回合为DM回合")
 
 # 示例使用
 if __name__ == "__main__":
@@ -76,4 +93,5 @@ if __name__ == "__main__":
     }
     
     handler.handle_event(event)
-    print("当前回合状态:", "已完成" if handler.current_turn and handler.current_turn.is_completed() else "未完成")
+    current_turn = handler.get_current_turn()
+    print("当前回合状态:", "已完成" if current_turn and current_turn.is_completed() else "未完成")

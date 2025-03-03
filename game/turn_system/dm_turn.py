@@ -16,7 +16,8 @@ class DMTurnHandler(TurnHandler):
         if event_type == 'dm_narration':
             narration = event.get('content')
             
-            if not self.current_turn:
+            current_turn = self.get_current_turn()
+            if not current_turn:
                 logger.error("当前回合未初始化")
                 return
                 
@@ -24,19 +25,21 @@ class DMTurnHandler(TurnHandler):
     
     def process_dm_turn(self, narration: str) -> None:
         """处理DM叙事（仅限DM回合）"""
-        if not self.current_turn:
+        current_turn = self.get_current_turn()
+        if not current_turn:
             logger.error("当前回合未初始化")
             return
             
-        if self.current_turn.turn_type != TurnType.DM:
+        if current_turn.turn_type != TurnType.DM:
             raise InvalidTurnOperation("非DM回合不能处理叙事")
             
-        self.current_turn.actions["dm_narration"] = narration
-        self.current_turn.status = TurnStatus.COMPLETED
+        current_turn.actions["dm_narration"] = narration
+        current_turn.status = TurnStatus.COMPLETED
 
     def generate_narration(self) -> str:
         """生成并应用剧情叙述"""
-        if not self.current_turn or 'match' not in self.context:
+        current_turn = self.get_current_turn()
+        if not current_turn or 'match' not in self.context:
             logger.error("当前回合或比赛上下文未初始化")
             return "错误：回合未初始化"
             
@@ -47,17 +50,36 @@ class DMTurnHandler(TurnHandler):
         self.process_dm_turn(result["narration"])
         
         return result["narration"]
+        
+    def on_finish_turn(self) -> None:
+        """DM回合结束时，设置下一个回合的信息"""
+        # 清理资源，执行回合结束时的操作
+        super().on_finish_turn()
+        
+        current_turn = self.get_current_turn()
+        if not current_turn:
+            logger.error("当前回合未初始化")
+            return
+        
+        # 设置下一个回合的类型为玩家回合
+        current_turn.next_turn_info['turn_type'] = TurnType.PLAYER
+        
+        logger.info(f"DM回合结束，下一回合为玩家回合")
 
     def request_next_player_turn(self, players: List[str]) -> None:
         """请求下一个玩家回合并设置激活玩家"""
-        if not self.current_turn:
+        current_turn = self.get_current_turn()
+        if not current_turn:
             logger.error("当前回合未初始化")
             return
             
-        # 只设置状态，不直接调用game_logic
-        self.current_turn.status = TurnStatus.COMPLETED
-        # 在context中存储下一回合需要激活的玩家
-        self.context['next_active_players'] = players
+        # 设置回合状态为完成
+        current_turn.status = TurnStatus.COMPLETED
+        
+        # 在next_turn_info中设置下一回合的类型和激活玩家
+        current_turn.next_turn_info['turn_type'] = TurnType.PLAYER
+        current_turn.next_turn_info['active_players'] = players
+        
         logger.info(f"DM回合完成，请求下一回合激活玩家: {players}")
 
 # 示例使用
@@ -81,4 +103,5 @@ if __name__ == "__main__":
     
     # 请求下一轮玩家回合
     handler.request_next_player_turn(["alice_id", "bob_id"])
-    print("已请求激活玩家：", handler.context.get('next_active_players', []))
+    current_turn = handler.get_current_turn()
+    print("已请求激活玩家：", current_turn.next_turn_info.get('active_players', []))
