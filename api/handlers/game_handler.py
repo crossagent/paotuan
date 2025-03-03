@@ -9,11 +9,16 @@ class GameMessageHandler(ChatbotHandler):
         super().__init__()
         self.game_match = game_match  # 引用游戏状态
         self.logger = logger if logger else logging.getLogger(__name__)
+        
+        # 设置消息回调，让 GameMatchLogic 可以主动发送消息
+        self.game_match.set_message_callback(self.reply_to_player)
 
     def reply_to_player(self, player_id: str, message: str) -> None:
         """向指定玩家发送消息"""
-        # 实现具体的发送逻辑（例如通过钉钉API）
         self.logger.info(f"回复玩家 {player_id}: {message}")
+        # 实现实际的消息发送逻辑
+        # 获取对应的 incoming_message 或使用缓存的 session_webhook
+        # 然后调用钉钉 API 发送消息
         # 这里可以添加实际的发送逻辑代码
 
     async def process(self, callback: any) -> tuple[str, str]:
@@ -68,8 +73,7 @@ class GameMessageHandler(ChatbotHandler):
             self.logger.error(f"处理玩家行动时出错: {str(e)}", exc_info=True)
             response_text = "游戏系统出现错误，请联系管理员"
 
-        # 回复钉钉消息
-        self.reply_to_player(player_id, response_text)
+        # 不再在这里直接回复，而是由 GameMatchLogic 决定何时回复
         return AckMessage.STATUS_OK, 'OK'
 
 if __name__ == "__main__":

@@ -11,6 +11,11 @@ class GameMatchLogic:
         self.current_room: Optional[Room] = None
         self.handlers: List[TurnHandler] = []
         self.players: List[Player] = []  # 管理玩家列表
+        self.message_callback = None  # 新增：消息回调函数
+
+    def set_message_callback(self, callback) -> None:
+        """设置消息回调函数，用于向钉钉发送消息"""
+        self.message_callback = callback
 
     def add_handler(self, handler: TurnHandler) -> None:
         self.handlers.append(handler)
@@ -161,8 +166,12 @@ class GameMatchLogic:
 
     def reply_to_player(self, player_id: str, message: str) -> None:
         """发送消息给指定玩家"""
-        # 实现具体的发送逻辑（例如通过钉钉API）
         logger.info(f"回复玩家 {player_id}: {message}")
+        # 使用回调函数发送消息
+        if self.message_callback:
+            self.message_callback(player_id, message)
+        else:
+            logger.warning("消息回调未设置，无法发送消息")
 
     def get_current_turn(self) -> Optional[Turn]:
         """获取当前回合"""
