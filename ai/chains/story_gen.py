@@ -1,254 +1,338 @@
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
-from langchain_core.output_parsers import StrOutputParser
+from langchain_core.output_parsers import PydanticOutputParser
 from langchain.memory import ConversationBufferMemory
+from pydantic import BaseModel, Field
+from typing import List, Dict, Any, Optional
+from game.state.models import Match, TurnType
 import os
 import yaml
 import logging
-import json
-import re
-from typing import List, Dict, Any, Optional
-from game.state.models import Match, TurnType
+import random
 
-# 自定义异常类
-class LLMTimeoutError(Exception):
-    """大模型请求超时异常"""
-    pass
+# Pydantic 模型定义
+class PlayerInfo(BaseModel):
+    """玩家角色信息模型"""
+    id: str = Field(..., description="角色ID")
+    name: str = Field(..., description="角色姓名")
+    gender: str = Field(..., description="角色性别")
+    age: int = Field(..., description="角色年龄", ge=12, le=100)
+    profession: str = Field(..., description="角色职业")
+    health: int = Field(default=100, description="生命值", ge=0, le=100)
+    items: List[str] = Field(default_factory=list, description="拥有的物品列表")
 
-class PlayerTimeoutError(Exception):
-    """玩家输入超时异常"""
-    pass
+class AttributeChange(BaseModel):
+    """属性变更模型"""
+    health: Optional[int] = Field(None, description="生命值变化")
 
-# 从配置加载API密钥和历史记录长度
-with open('config/llm_settings.yaml', 'r', encoding='utf-8') as f:
-    config = yaml.safe_load(f)
-
-# 设置OpenAI API密钥
-os.environ["OPENAI_API_KEY"] = config.get('openai_api_key', '')
-history_length = config.get('history_length', 50)  # 获取历史记录长度，默认为50
-
-# 初始化记忆模块
-story_memory = ConversationBufferMemory(
-    memory_key="history",
-    return_only_outputs=True,
-    return_messages=True
-)
-
-# 初始化模型
-# 使用OpenAI的模型替代Gemini
-base_url = config.get('base_url', 'https://api.openai.com/v1')  # 默认值为官方OpenAI API
-openai_model = config.get('model', 'gpt-3.5-turbo')
-openai_pro = ChatOpenAI(base_url=base_url, model=openai_model, temperature=0.7)
-openai_flash = ChatOpenAI(base_url=base_url, model=openai_model, temperature=0.5)
-
-# JSON输出解析器
-class StoryOutputParser:
-    def parse(self, text: str) -> Dict[str, Any]:
-        """将大语言模型输出解析为JSON格式"""
-        try:
-            # 尝试从文本中提取JSON部分
-            json_match = re.search(r'```json\s*([\s\S]*?)\s*```', text)
-            if json_match:
-                json_str = json_match.group(1)
-                return json.loads(json_str)
-            
-            # 如果没有找到JSON块，尝试直接解析整个文本
-            return json.loads(text)
-        except (json.JSONDecodeError, AttributeError):
-            # 如果解析失败，返回一个基本结构
-            logging.warning(f"无法解析JSON输出: {text}")
-            return {
-                "narration": text,
-                "need_dice_roll": False,
-                "active_players": [],
-                "attribute_changes": {}
-            }
-
-# 构建Chain
-def _build_story_chain():
-    # 将历史记录转换为字符串
-    def format_history(vars):
-        history = story_memory.load_memory_variables({})
-        if isinstance(history.get('history'), list):
-            return "\n".join([item.content for item in history['history']])
-        return str(history.get('history', ''))
-
-    prompt = ChatPromptTemplate.from_template(
-        """
-        你是一个专业的跑团游戏主持人(DM)，负责讲述故事并推进剧情。
-
-        # 当前场景
-        {current_scene}
-
-        # 玩家信息
-        {players}
-
-        # 玩家上一回合的行动
-        {player_actions}
-
-        # 历史记录
-        {history}
-
-        请根据当前场景和玩家行动，推进故事发展。
-        
-        首先，判断玩家的行动是否需要进行属性检定（如力量、敏捷、智力等）。
-        如果需要检定，请提供检定类型、难度值，以及检定成功和失败两种情况下的故事发展和属性变化。
-        如果不需要检定，直接描述故事的发展。
-
-        请以JSON格式输出，包含以下字段：
-        1. need_dice_roll: 布尔值，表示是否需要扔色子进行判定
-        2. roll_type: 如果需要判定，说明判定类型（如"力量"、"敏捷"等）
-        3. difficulty: 如果需要判定，说明难度（1-20的数字）
-        4. success_narration: 如果需要判定，描述判定成功时的故事发展
-        5. failure_narration: 如果需要判定，描述判定失败时的故事发展
-        6. success_attribute_changes: 如果需要判定，描述判定成功时的属性变化
-        7. failure_attribute_changes: 如果需要判定，描述判定失败时的属性变化
-        8. narration: 如果不需要判定，直接描述故事发展
-        9. active_players: 数组，包含下一回合需要行动的玩家ID
-        10. attribute_changes: 如果不需要判定，描述属性变化
-
-        示例输出（需要判定的情况）：
-        ```json
-        {
-            "need_dice_roll": true,
-            "roll_type": "力量",
-            "difficulty": 15,
-            "success_narration": "Alice成功推开了沉重的石门，露出了一条通往地下的楼梯。",
-            "failure_narration": "Alice尝试推开石门，但门纹丝不动，似乎需要更大的力量。",
-            "success_attribute_changes": {"player1": {"stamina": -5}},
-            "failure_attribute_changes": {"player1": {"stamina": -10, "health": -5}},
-            "active_players": ["player1", "player2"]
-        }
-        ```
-
-        示例输出（不需要判定的情况）：
-        ```json
-        {
-            "need_dice_roll": false,
-            "narration": "你们轻松地穿过森林，来到了一片开阔地。远处可以看到一座古老的城堡。",
-            "active_players": ["player1", "player2", "player3"],
-        }
-        ```
-        """
+class DiceRollResult(BaseModel):
+    """骰子检定结果模型"""
+    action_desc: str = Field(..., description="行动描述")
+    difficulty: int = Field(..., description="检定难度(1-20)", ge=1, le=20)
+    success_narration: str = Field(..., description="检定成功时的描述")
+    failure_narration: str = Field(..., description="检定失败时的描述")
+    success_attribute_changes: Dict[str, AttributeChange] = Field(
+        default_factory=dict,
+        description="检定成功时的生命值变化"
+    )
+    failure_attribute_changes: Dict[str, AttributeChange] = Field(
+        default_factory=dict,
+        description="检定失败时的生命值变化"
     )
 
-    chain = (
-        {
-            "current_scene": RunnablePassthrough(),
-            "players": RunnablePassthrough(),
-            "history": format_history
-        }
-        | prompt
-        | openai_pro
-        | StrOutputParser()
-    )
+class StoryResponse(BaseModel):
+    """故事响应模型"""
+    need_dice_roll: bool = Field(..., description="是否需要骰子检定")
+    narration: Optional[str] = Field(None, description="故事描述(不需要检定时)")
+    dice_roll: Optional[DiceRollResult] = Field(None, description="骰子检定相关信息")
+    active_players: List[str] = Field(..., description="下一回合激活的玩家ID列表")
 
-    return chain
-
-story_chain = _build_story_chain()
-
-class DMProcessingChain:
+class StoryChain:
     def __init__(self):
-        self.story_parser = StoryOutputParser()
-    
-    def process_dm_turn(self, match: Match, players: List[str]) -> Dict[str, Any]:
-        """处理DM回合，生成故事叙述和下一回合激活玩家"""
-        import random
-        from typing import List, Dict, Any, Optional
-        
-        current_match = match
-        current_scene = current_match.scene
-        story_history = getattr(match, 'story_history', [])
-        
-        # 获取上一个玩家回合的行动（如果有）
-        player_actions_text = "没有玩家行动"
-        if len(current_match.turns) > 1:
-            # 获取上一个回合（假设是玩家回合）
-            prev_turn = current_match.turns[-2]  # current_turn是当前DM回合，-2是上一个玩家回合
-            if prev_turn.turn_type == TurnType.PLAYER and prev_turn.actions:
-                # 收集玩家行动
-                actions = []
-                for player_id, action in prev_turn.actions.items():
-                    # 尝试获取玩家名称
-                    player_name = player_id
-                    for p in current_match.players if hasattr(current_match, 'players') else []:
-                        if p.id == player_id:
-                            player_name = p.name
-                            break
-                    
-                    actions.append(f"{player_name}({player_id}): {action}")
-                
-                player_actions_text = "\n".join(actions)
+        # 从配置加载设置
+        with open('config/llm_settings.yaml', 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+            
+        # 初始化设置
+        self.history_length = config.get('history_length', 50)
+        base_url = config.get('base_url', 'https://api.openai.com/v1')
+        openai_model = config.get('model', 'gpt-3.5-turbo')
+        os.environ["OPENAI_API_KEY"] = config.get('openai_api_key', '')
 
-        context = {
-            "current_scene": current_scene,
-            "players": ", ".join(players),
-            "player_actions": player_actions_text,
-            "history": "\n".join(story_history[-history_length:])
+        # 初始化组件
+        self.llm = ChatOpenAI(
+            base_url=base_url,
+            model=openai_model,
+            temperature=0.7
+        )
+        self.memory = ConversationBufferMemory(
+            memory_key="history",
+            return_messages=True
+        )
+        self.output_parser = PydanticOutputParser(pydantic_object=StoryResponse)
+
+        # 构建提示模板
+        self.prompt = ChatPromptTemplate.from_template(
+            template="""你是一个专业的跑团游戏主持人(DM)。
+            
+            当前场景：{current_scene}
+            玩家信息：{players}
+            玩家行动：{player_actions}
+            历史记录：{history}
+
+            根据以上信息推进故事发展。判断是否需要属性检定，会修改到属性或消耗物品的行为一定要进行判定。
+
+            {format_instructions}
+            """
+        )
+
+        # 构建Chain
+        self.chain = (
+            {
+                "current_scene": RunnablePassthrough(),
+                "players": RunnablePassthrough(),
+                "player_actions": RunnablePassthrough(),
+                "history": self._format_history,
+                "format_instructions": lambda _: self.output_parser.get_format_instructions()
+            }
+            | self.prompt
+            | self.llm
+            | self.output_parser
+        )
+
+    def _format_turn_result(self, result: Dict[str, Any], player_name: str) -> str:
+        """格式化单个行动结果"""
+        if result.get('need_dice_roll'):
+            roll_info = (
+                f"系统: {player_name}进行了{result['roll_type']}检定，"
+                f"难度为{result['difficulty']}，"
+                f"骰子结果为{result['roll_result']}，"
+                f"{'成功' if result['success'] else '失败'}。\n"
+            )
+            
+            # 添加结果描述
+            roll_info += f"DM: {result['narration']}\n"
+            
+            # 添加属性变化
+            if result.get('attribute_changes'):
+                changes = []
+                for char_id, change in result['attribute_changes'].items():
+                    if change.health:
+                        changes.append(f"{char_id}的生命值变化{change.health}")
+                if changes:
+                    roll_info += f"系统: {', '.join(changes)}\n"
+                    
+            return roll_info
+        else:
+            return f"DM: {result['narration']}\n"
+
+    def _format_history(self, vars: Dict[str, Any]) -> str:
+        """格式化历史记录"""
+        history = self.memory.load_memory_variables({})
+        messages = history.get('history', [])
+        
+        if not isinstance(messages, list):
+            return str(messages)
+            
+        formatted_history = []
+        for msg in messages[-self.history_length:]:
+            # 根据消息类型格式化
+            if "玩家" in msg.content:
+                formatted_history.append(msg.content)
+            elif "系统" in msg.content:
+                formatted_history.append(msg.content)
+            else:
+                formatted_history.append(f"DM: {msg.content}")
+                
+        return "\n".join(formatted_history)
+
+    def _save_formatted_history(self, context: Dict[str, Any], result: Dict[str, Any]) -> None:
+        """保存格式化的历史记录"""
+        # 保存玩家行动
+        if context['player_actions'] != "没有玩家行动":
+            self.memory.save_context(
+                {"input": ""},
+                {"output": context['player_actions']}
+            )
+        
+        # 保存检定结果和DM描述
+        self.memory.save_context(
+            {"input": ""},
+            {"output": self._format_turn_result(result, context.get('player_name', '未知玩家'))}
+        )
+
+    def _handle_dice_roll(self, dice_result: DiceRollResult) -> Dict[str, Any]:
+        """处理骰子检定"""
+        roll = random.randint(1, 20)
+        success = roll >= dice_result.difficulty
+        
+        return {
+            "narration": dice_result.success_narration if success else dice_result.failure_narration,
+            "attribute_changes": (
+                dice_result.success_attribute_changes if success 
+                else dice_result.failure_attribute_changes
+            ),
+            "roll_result": roll,
+            "success": success,
+            "roll_type": dice_result.action_desc,
+            "difficulty": dice_result.difficulty
         }
 
+    def process_turn(self, match: Match, players: List[str]) -> Dict[str, Any]:
+        """处理一个回合"""
         try:
-            # 调用大语言模型
-            narration = story_chain.invoke(context)
+            # 准备上下文
+            context = self._prepare_context(match, players)
             
-            # 解析输出为JSON格式
-            result = self.story_parser.parse(narration)
+            # 生成响应 - 使用同步调用
+            response = self.chain.invoke(context)
             
-            # 处理判定逻辑
-            if result.get("need_dice_roll", False):
-                # 需要判定，模拟骰子结果
-                dice_type = 20  # 默认使用20面骰子
-                roll_result = random.randint(1, dice_type)
-                
-                # 判断成功或失败
-                difficulty = result.get("difficulty", 10)
-                success = roll_result >= difficulty
-                
-                # 根据成功或失败选择对应的叙述
-                final_narration = result.get("success_narration" if success else "failure_narration", 
-                                          "骰子结果：" + str(roll_result))
-                
-                # 根据成功或失败选择对应的属性变化
-                attribute_changes = result.get("success_attribute_changes" if success else "failure_attribute_changes", {})
-                
-                # 记录判定结果
-                logging.info(f"判定类型：{result.get('roll_type', '未知')}，难度：{difficulty}，骰子结果：{roll_result}，{'成功' if success else '失败'}")
-                
-                # 更新记忆
-                story_memory.save_context(
-                    {"input": context["current_scene"] + "\n" + context["player_actions"]},
-                    {"output": final_narration}
-                )
-                
-                # 返回结果
-                return {
-                    "narration": final_narration,
-                    "active_players": result.get("active_players", players[:2]),
-                    "need_dice_roll": False,  # 已经完成判定
-                    "roll_type": result.get("roll_type", ""),
-                    "difficulty": difficulty,
-                    "roll_result": roll_result,
-                    "success": success,
-                    "attribute_changes": attribute_changes
-                }
+            # 处理响应
+            if response.need_dice_roll and response.dice_roll:
+                result = self._handle_dice_roll(response.dice_roll)
             else:
-                # 不需要判定，直接使用narration
-                final_narration = result.get("narration", "")
-                
-                # 更新记忆
-                story_memory.save_context(
-                    {"input": context["current_scene"] + "\n" + context["player_actions"]},
-                    {"output": final_narration}
-                )
-                
-                # 返回结果
-                return {
-                    "narration": final_narration,
-                    "active_players": result.get("active_players", players[:2]),
-                    "need_dice_roll": False,
-                    "attribute_changes": result.get("attribute_changes", {})
+                result = {
+                    "narration": response.narration,
+                    "need_dice_roll": False
                 }
+            
+            # 保存格式化的历史记录
+            self._save_formatted_history(context, result)
+            
+            return {
+                **result,
+                "active_players": response.active_players
+            }
+            
         except Exception as e:
-            logging.error(f"故事生成失败：{str(e)}")
+            logging.error(f"处理回合失败: {str(e)}")
             raise
+
+    def _prepare_context(self, match: Match, players: List[str]) -> Dict[str, Any]:
+        """准备上下文信息"""
+        # 获取上一个回合的玩家行动
+        player_actions = self._get_previous_actions(match)
+        
+        return {
+            "current_scene": match.scene,
+            "players": ", ".join(players),
+            "player_actions": player_actions
+        }
+
+    def _get_previous_actions(self, match: Match) -> str:
+        """获取上一回合的玩家行动"""
+        if len(match.turns) < 2:
+            return "没有玩家行动"
+            
+        prev_turn = match.turns[-2]
+        if (prev_turn.turn_type != TurnType.PLAYER or not prev_turn.actions):
+            return "没有玩家行动"
+            
+        actions = []
+        for player_id, action in prev_turn.actions.items():
+            player_name = self._get_player_name(match, player_id)
+            actions.append(f"{player_name}({player_id}): {action}")
+            
+        return "\n".join(actions)
+
+    def _get_player_name(self, match: Match, player_id: str) -> str:
+        """获取玩家名称"""
+        if not hasattr(match, 'players'):
+            return player_id
+            
+        for player in match.players:
+            if player.id == player_id:
+                return player.name
+                
+        return player_id
+
+# 在文件末尾添加以下代码
+def main():
+    """测试主函数"""
+    # 模拟游戏数据
+    class Player:
+        def __init__(self, id: str, name: str):
+            self.id = id
+            self.name = name
+
+    class Turn:
+        def __init__(self, turn_type: TurnType, actions: Dict[str, str] = None):
+            self.turn_type = turn_type
+            self.actions = actions or {}
+
+    class TestMatch:
+        def __init__(self):
+            self.scene = "一个昏暗的地下城入口前，石壁上的火把摇曳着微弱的光芒。"
+            self.players = [
+                PlayerInfo(
+                    id="p1",
+                    name="战士小王",
+                    gender="男",
+                    age=25,
+                    profession="战士",
+                    health=100,
+                    items=["大剑", "盾牌", "治疗药水"]
+                ),
+                PlayerInfo(
+                    id="p2",
+                    name="法师小李",
+                    gender="女",
+                    age=22,
+                    profession="法师",
+                    health=100,
+                    items=["法杖", "魔法书", "魔力药水"]
+                ),
+                PlayerInfo(
+                    id="p3",
+                    name="盗贼小张",
+                    gender="男",
+                    age=20,
+                    profession="盗贼",
+                    health=100,
+                    items=["匕首", "撬锁工具", "隐身斗篷"]
+                )
+            ]
+            self.turns = [
+                Turn(TurnType.PLAYER, {
+                    "p1": "我想查看周围是否有危险",
+                    "p2": "我准备施放照明术",
+                    "p3": "我躲在暗处观察"
+                })
+            ]
+
+    try:
+        # 创建故事链实例
+        story_chain = StoryChain()
+        
+        # 创建测试数据
+        match = TestMatch()
+        players = ["p1", "p2", "p3"]
+        
+        # 处理一个回合 - 现在是同步调用
+        print("开始处理回合...")
+        result = story_chain.process_turn(match, players)
+        
+        # 打印结果
+        print("\n=== 处理结果 ===")
+        print(f"故事描述: {result.get('narration', '无描述')}")
+        
+        if result.get('need_dice_roll'):
+            print("\n骰子检定结果:")
+            print(f"检定类型: {result.get('roll_type')}")
+            print(f"难度: {result.get('difficulty')}")
+            print(f"结果: {result.get('roll_result')}")
+            print(f"是否成功: {'成功' if result.get('success') else '失败'}")
+        
+        print("\n属性变化:")
+        for char_id, changes in result.get('attribute_changes', {}).items():
+            print(f"{char_id}: {changes}")
+        
+        print("\n下回合激活玩家:", result.get('active_players', []))
+        
+    except Exception as e:
+        logging.error(f"测试失败: {str(e)}")
+        raise
+
+if __name__ == "__main__":
+    main()  # 直接调用，不需要 asyncio
