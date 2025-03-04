@@ -1,4 +1,4 @@
-from ai.chains.story_gen import TurnProcessingChain
+from ai.chains.story_gen import DMProcessingChain
 from game.turn_system.base_handler import TurnHandler
 from game.state.models import TurnType, Player, TurnStatus, InvalidTurnOperation, EventType
 from game.state.models import Turn, Match
@@ -51,7 +51,7 @@ class DMTurnHandler(TurnHandler):
         current_match = self.context['match']
         players = [p.name for p in self.context.get('players', [])]
 
-        result = TurnProcessingChain().process_dm_turn(current_match, players)
+        result = DMProcessingChain().process_dm_turn(current_match, players)
         self.process_dm_turn(result["narration"])
         
         return result["narration"]
