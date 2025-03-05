@@ -1,6 +1,6 @@
 from enum import Enum, auto
 from pydantic import BaseModel
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Literal
 from datetime import datetime
 
 class GameStatus(str, Enum):
@@ -30,6 +30,11 @@ class Player(BaseModel):
     attributes: Dict[str, Any] = {}
     items: List[str] = []
 
+class NextTurnInfo(BaseModel):
+    """下一回合信息模型"""
+    turn_type: TurnType  # 下一回合类型（DM或PLAYER）
+    active_players: List[str] = []  # 下一回合激活的玩家ID列表（仅在turn_type为PLAYER时有意义）
+
 class Turn(BaseModel):
     """回合模型"""
     id: str
@@ -39,7 +44,14 @@ class Turn(BaseModel):
     completed_at: Optional[datetime] = None
     active_players: List[str] = []
     actions: Dict[str, str] = {}
-    next_turn_info: Dict[str, Any] = {}
+    next_turn_info: Optional[NextTurnInfo] = None  # 下一回合信息，包含回合类型和激活玩家
+    
+    # 回合模式，只在turn_type为PLAYER时有意义
+    turn_mode: Optional[Literal["action", "dice"]] = None
+    
+    # 掷骰子相关字段，只在turn_mode为"dice"时有意义
+    difficulty: Optional[int] = None  # 掷骰子难度
+    dice_results: Dict[str, Dict[str, Any]] = {}  # 玩家ID -> {roll: 骰子结果, success: 是否成功, difficulty: 难度, action: 玩家行动}
 
 class Match(BaseModel):
     """游戏局模型"""

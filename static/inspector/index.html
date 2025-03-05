@@ -96,16 +96,89 @@
                                 active: currentMatch.current_turn_id === turn.id,
                                 completed: turn.status === 'COMPLETED',
                                 dm: turn.turn_type === 'DM',
-                                player: turn.turn_type === 'PLAYER'
-                             }">
+                                player: turn.turn_type === 'PLAYER',
+                                expanded: expandedTurns.includes(turn.id)
+                             }"
+                             @click="toggleTurnExpand(turn.id)">
                             <div class="turn-header">
                                 <span class="turn-id">{{ turn.id.substr(-6) }}</span>
                                 <span class="turn-type">{{ turn.turn_type }}</span>
                                 <span class="turn-status">{{ turn.status }}</span>
+                                <span class="expand-icon">{{ expandedTurns.includes(turn.id) ? '▼' : '▶' }}</span>
                             </div>
                             <div class="turn-time">
                                 {{ formatTime(turn.created_at) }}
                                 <span v-if="turn.completed_at"> → {{ formatTime(turn.completed_at) }}</span>
+                            </div>
+                            
+                            <!-- 展开的详细信息 -->
+                            <div v-if="expandedTurns.includes(turn.id)" class="turn-details">
+                                <div v-if="turn.turn_mode" class="detail-item">
+                                    <div class="detail-label">回合模式:</div>
+                                    <div class="detail-value">{{ turn.turn_mode }}</div>
+                                </div>
+                                
+                                <div v-if="turn.difficulty !== null && turn.difficulty !== undefined" class="detail-item">
+                                    <div class="detail-label">难度:</div>
+                                    <div class="detail-value">{{ turn.difficulty }}</div>
+                                </div>
+                                
+                                <div v-if="turn.active_players && turn.active_players.length" class="detail-item">
+                                    <div class="detail-label">激活玩家:</div>
+                                    <div class="detail-value">
+                                        <span v-for="playerId in turn.active_players" :key="playerId" class="player-tag">
+                                            {{ getPlayerName(playerId) }}
+                                        </span>
+                                    </div>
+                                </div>
+                                
+                                <div v-if="Object.keys(turn.actions).length" class="detail-item">
+                                    <div class="detail-label">行动记录:</div>
+                                    <div class="detail-value">
+                                        <div v-for="(action, actorId) in turn.actions" :key="actorId" class="action-item">
+                                            <div class="actor">{{ actorId === 'dm_narration' ? 'DM' : getPlayerName(actorId) }}:</div>
+                                            <div class="action-content">{{ action }}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div v-if="Object.keys(turn.dice_results).length" class="detail-item">
+                                    <div class="detail-label">掷骰结果:</div>
+                                    <div class="detail-value">
+                                        <div v-for="(result, playerId) in turn.dice_results" :key="playerId" class="dice-result">
+                                            <div class="player-name">{{ getPlayerName(playerId) }}:</div>
+                                            <div class="dice-info">
+                                                <div>行动: {{ result.action }}</div>
+                                                <div>结果: {{ result.roll }} (难度: {{ result.difficulty }})</div>
+                                                <div :class="{'success': result.success, 'failure': !result.success}">
+                                                    {{ result.success ? '成功' : '失败' }}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div v-if="Object.keys(turn.next_turn_info).length" class="detail-item">
+                                    <div class="detail-label">下一回合信息:</div>
+                                    <div class="detail-value">
+                                        <div class="next-turn-info">
+                                            <div class="turn-type-info">
+                                                <span class="label">回合类型:</span> 
+                                                <span :class="{'dm-turn': turn.next_turn_info.turn_type === 'DM', 'player-turn': turn.next_turn_info.turn_type === 'PLAYER'}">
+                                                    {{ turn.next_turn_info.turn_type }}
+                                                </span>
+                                            </div>
+                                            <div v-if="turn.next_turn_info.turn_type === 'PLAYER' && turn.next_turn_info.active_players && turn.next_turn_info.active_players.length" class="active-players-info">
+                                                <span class="label">激活玩家:</span>
+                                                <div class="players-list">
+                                                    <span v-for="playerId in turn.next_turn_info.active_players" :key="playerId" class="player-tag">
+                                                        {{ getPlayerName(playerId) }}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -145,7 +218,25 @@
                     </div>
                     
                     <h3>下一回合信息</h3>
-                    <pre>{{ JSON.stringify(currentTurn.next_turn_info, null, 2) }}</pre>
+                    <div v-if="Object.keys(currentTurn.next_turn_info).length" class="next-turn-info-box">
+                        <div class="next-turn-info">
+                            <div class="turn-type-info">
+                                <span class="label">回合类型:</span> 
+                                <span :class="{'dm-turn': currentTurn.next_turn_info.turn_type === 'DM', 'player-turn': currentTurn.next_turn_info.turn_type === 'PLAYER'}">
+                                    {{ currentTurn.next_turn_info.turn_type }}
+                                </span>
+                            </div>
+                            <div v-if="currentTurn.next_turn_info.turn_type === 'PLAYER' && currentTurn.next_turn_info.active_players && currentTurn.next_turn_info.active_players.length" class="active-players-info">
+                                <span class="label">激活玩家:</span>
+                                <div class="players-list">
+                                    <span v-for="playerId in currentTurn.next_turn_info.active_players" :key="playerId" class="player-tag">
+                                        {{ getPlayerName(playerId) }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-else class="no-data">无下一回合信息</div>
                 </div>
                 
                 <div v-if="selectedRoom && currentView === 'turn' && !currentTurn" class="error-view">

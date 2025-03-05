@@ -178,6 +178,12 @@ select {
     border-radius: 3px;
     background-color: #f8f8f8;
     border-left: 4px solid #ddd;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.turn-item:hover {
+    background-color: #eee;
 }
 
 .turn-item.active {
@@ -186,7 +192,7 @@ select {
 }
 
 .turn-item.completed {
-    opacity: 0.7;
+    opacity: 0.8;
 }
 
 .turn-item.dm {
@@ -197,15 +203,131 @@ select {
     border-left-color: #2ecc71;
 }
 
+.turn-item.expanded {
+    padding-bottom: 1rem;
+    background-color: #f0f0f0;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
 .turn-header {
     display: flex;
     justify-content: space-between;
     font-weight: bold;
+    align-items: center;
+}
+
+.expand-icon {
+    font-size: 0.8rem;
+    color: #7f8c8d;
+    margin-left: 0.5rem;
 }
 
 .turn-time {
     font-size: 0.8rem;
     color: #7f8c8d;
+    margin-bottom: 0.5rem;
+}
+
+.turn-details {
+    margin-top: 0.8rem;
+    padding-top: 0.8rem;
+    border-top: 1px dashed #ccc;
+}
+
+.detail-item {
+    margin-bottom: 0.8rem;
+}
+
+.detail-label {
+    font-weight: bold;
+    color: #34495e;
+    margin-bottom: 0.3rem;
+}
+
+.detail-value {
+    padding-left: 0.5rem;
+}
+
+.dice-result {
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #eee;
+}
+
+.dice-result:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.player-name {
+    font-weight: bold;
+    color: #2c3e50;
+}
+
+.dice-info {
+    margin-left: 1rem;
+    font-size: 0.9rem;
+}
+
+.success {
+    color: #2ecc71;
+    font-weight: bold;
+}
+
+.failure {
+    color: #e74c3c;
+    font-weight: bold;
+}
+
+/* 下一回合信息样式 */
+.next-turn-info-box {
+    background-color: #f8f8f8;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    padding: 0.8rem;
+    margin: 1rem 0;
+}
+
+.next-turn-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.turn-type-info, .active-players-info {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.label {
+    font-weight: bold;
+    color: #2c3e50;
+    min-width: 80px;
+}
+
+.dm-turn {
+    color: #e74c3c;
+    font-weight: bold;
+    padding: 0.2rem 0.5rem;
+    background-color: rgba(231, 76, 60, 0.1);
+    border-radius: 3px;
+}
+
+.player-turn {
+    color: #2ecc71;
+    font-weight: bold;
+    padding: 0.2rem 0.5rem;
+    background-color: rgba(46, 204, 113, 0.1);
+    border-radius: 3px;
+}
+
+.players-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
 }
 
 .player-tags {

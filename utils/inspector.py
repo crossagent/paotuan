@@ -113,6 +113,14 @@ class GameStateInspector:
     
     def _format_turn(self, turn: Turn) -> Dict[str, Any]:
         """格式化回合数据"""
+        # 处理next_turn_info，如果存在则转换为字典
+        next_turn_info = None
+        if turn.next_turn_info:
+            next_turn_info = {
+                "turn_type": turn.next_turn_info.turn_type,
+                "active_players": turn.next_turn_info.active_players
+            }
+            
         return {
             "id": turn.id,
             "turn_type": turn.turn_type,
@@ -121,7 +129,10 @@ class GameStateInspector:
             "completed_at": turn.completed_at.isoformat() if turn.completed_at else None,
             "active_players": turn.active_players,
             "actions": turn.actions,
-            "next_turn_info": turn.next_turn_info
+            "next_turn_info": next_turn_info,
+            "turn_mode": turn.turn_mode,
+            "difficulty": turn.difficulty,
+            "dice_results": turn.dice_results
         }
     
     def _format_player(self, player: Player) -> Dict[str, Any]:

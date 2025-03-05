@@ -8,7 +8,8 @@ const app = Vue.createApp({
             autoRefresh: true,
             refreshInterval: 5,
             refreshTimer: null,
-            apiBaseUrl: '/api'
+            apiBaseUrl: '/api',
+            expandedTurns: [] // 存储已展开的回合ID
         };
     },
     computed: {
@@ -77,6 +78,16 @@ const app = Vue.createApp({
             if (!dateStr) return '';
             const date = new Date(dateStr);
             return date.toLocaleTimeString();
+        },
+        
+        toggleTurnExpand(turnId) {
+            // 切换回合的展开/折叠状态
+            const index = this.expandedTurns.indexOf(turnId);
+            if (index === -1) {
+                this.expandedTurns.push(turnId);
+            } else {
+                this.expandedTurns.splice(index, 1);
+            }
         },
         
         startAutoRefresh() {

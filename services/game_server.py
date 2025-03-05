@@ -87,6 +87,20 @@ class GameServer:
                 
             # 检查回合是否完成
             if current_turn.status == TurnStatus.COMPLETED:
+                # 如果是掷骰子回合，处理掷骰子结果
+                if current_turn.turn_mode == "dice":
+                    # 处理掷骰子结果
+                    dice_results = self.rule_engine.process_dice_turn_results(current_turn)
+                    
+                    # 通知所有玩家掷骰子结果
+                    result_message = "【掷骰子结果】\n"
+                    for result in dice_results.get("summary", []):
+                        player_name = next((p.name for p in room.players if p.id == result["player_id"]), result["player_id"])
+                        result_message += f"{player_name} 尝试 {result['action']}，掷出了 {result['roll']}，难度 {result['difficulty']}，{'成功' if result['success'] else '失败'}\n"
+                    
+                    for pid in [p.id for p in room.players]:
+                        await self.send_message(pid, result_message)
+                
                 # 转到DM回合
                 turn_manager.complete_current_turn(TurnType.DM)
                 
@@ -159,21 +173,30 @@ class GameServer:
         
         # 获取上一个回合的玩家行动
         previous_actions = ""
+        dice_results = None
+        
         if len(match.turns) > 1:
             prev_turn = [t for t in match.turns if t.id != current_turn.id][-1]
             if prev_turn.turn_type == TurnType.PLAYER:
-                actions = []
-                for pid, action in prev_turn.actions.items():
-                    player_name = next((p.name for p in room.players if p.id == pid), pid)
-                    actions.append(f"{player_name}: {action}")
-                previous_actions = "\n".join(actions)
+                if prev_turn.turn_mode == "dice":
+                    # 如果上一回合是掷骰子回合，获取掷骰子结果
+                    dice_results = self.rule_engine.process_dice_turn_results(prev_turn)
+                    # 不需要设置previous_actions，因为掷骰子回合的行动已经包含在dice_results中
+                else:
+                    # 普通行动回合，获取玩家行动
+                    actions = []
+                    for pid, action in prev_turn.actions.items():
+                        player_name = next((p.name for p in room.players if p.id == pid), pid)
+                        actions.append(f"{player_name}: {action}")
+                    previous_actions = "\n".join(actions)
         
         # 准备生成上下文
         context = {
             "current_scene": match.scene,
             "players": ", ".join(player_names),
             "player_actions": previous_actions or "没有玩家行动",
-            "history": "（历史记录将在这里添加）" # 实际实现需要保存历史记录
+            "history": "（历史记录将在这里添加）", # 实际实现需要保存历史记录
+            "dice_results": dice_results  # 添加掷骰子结果
         }
         
         # 调用AI服务
@@ -181,34 +204,55 @@ class GameServer:
         
         # 处理AI响应
         if response.need_dice_roll and response.difficulty:
-            # 处理需要骰子检定的情况
-            # 这里只是简化处理，实际可能需要更复杂的逻辑
-            success, roll = self.rule_engine.handle_dice_check(
-                response.action_desc or "未知行动",
-                response.difficulty
+            # 需要骰子检定，创建掷骰子回合
+            narration = response.narration
+            
+            # 保存DM叙述
+            current_turn.actions["dm_narration"] = narration
+            
+            # 完成DM回合，准备下一个玩家回合
+            turn_manager.complete_current_turn(TurnType.PLAYER, response.active_players)
+            
+            # 创建新的掷骰子回合
+            player_turn = turn_manager.start_new_turn(
+                TurnType.PLAYER, 
+                response.active_players,
+                turn_mode="dice",
+                difficulty=response.difficulty
             )
             
-            narration = f"【系统】进行了{response.action_desc}检定，难度{response.difficulty}，骰子结果{roll}，{'成功' if success else '失败'}。\n"
-            narration += response.narration
+            # 通知所有玩家
+            for player_id in player_ids:
+                await self.send_message(player_id, narration)
+            
+            # 通知激活玩家
+            for player_id in response.active_players:
+                action_desc = response.action_desc or "行动"
+                await self.send_message(player_id, f"需要进行 {action_desc} 的骰子检定，难度为 {response.difficulty}。请描述你的具体行动。")
         else:
+            # 普通回合，不需要骰子检定
             narration = response.narration
-        
-        # 保存DM叙述
-        current_turn.actions["dm_narration"] = narration
-        
-        # 完成DM回合，准备下一个玩家回合
-        turn_manager.complete_current_turn(TurnType.PLAYER, response.active_players)
-        
-        # 创建新的玩家回合
-        player_turn = turn_manager.start_new_turn(TurnType.PLAYER, response.active_players)
-        
-        # 通知所有玩家
-        for player_id in player_ids:
-            await self.send_message(player_id, narration)
-        
-        # 通知激活玩家
-        for player_id in response.active_players:
-            await self.send_message(player_id, "轮到你行动了，请输入你的行动。")
+            
+            # 保存DM叙述
+            current_turn.actions["dm_narration"] = narration
+            
+            # 完成DM回合，准备下一个玩家回合
+            turn_manager.complete_current_turn(TurnType.PLAYER, response.active_players)
+            
+            # 创建新的普通玩家回合
+            player_turn = turn_manager.start_new_turn(
+                TurnType.PLAYER, 
+                response.active_players,
+                turn_mode="action"
+            )
+            
+            # 通知所有玩家
+            for player_id in player_ids:
+                await self.send_message(player_id, narration)
+            
+            # 通知激活玩家
+            for player_id in response.active_players:
+                await self.send_message(player_id, "轮到你行动了，请输入你的行动。")
         
         return []
 

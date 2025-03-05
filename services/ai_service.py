@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
 import logging
 import yaml
 import os
@@ -62,6 +62,7 @@ class OpenAIService(AIService):
             玩家信息：{players}
             玩家行动：{player_actions}
             历史记录：{history}
+            {dice_results}
 
             根据以上信息推进故事发展。判断是否需要属性检定，会修改到属性或消耗物品的行为一定要进行判定。
 
@@ -80,6 +81,17 @@ class OpenAIService(AIService):
                 "history": context.get("history", ""),
                 "format_instructions": self.output_parser.get_format_instructions()
             }
+            
+            # 处理掷骰子结果
+            dice_results = context.get("dice_results", None)
+            if dice_results and dice_results.get("summary"):
+                dice_results_text = "判定结果:\n"
+                for result in dice_results["summary"]:
+                    player_action = result.get('action', '行动')
+                    dice_results_text += f"玩家 {result['player_id']} 尝试 {player_action}，掷出了 {result['roll']}，难度 {result['difficulty']}，{'成功' if result['success'] else '失败'}\n"
+                input_data["dice_results"] = dice_results_text
+            else:
+                input_data["dice_results"] = ""
             
             # 生成提示
             prompt = self.prompt.format(**input_data)
