@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from typing import List
-from models.entities import Room, TurnType, TurnStatus
+from models.entities import Room, TurnType, TurnStatus, GameStatus
 from core.game import GameInstance
 from core.room import RoomManager
 from core.turn import TurnManager
@@ -37,6 +37,7 @@ class GameServer:
         self.event_bus.subscribe("PLAYER_JOINED", self._handle_player_joined)
         self.event_bus.subscribe("PLAYER_ACTION", self._handle_player_action)
         self.event_bus.subscribe("DM_NARRATION", self._handle_dm_narration)
+        self.event_bus.subscribe("START_MATCH", self._handle_start_game)
     
     async def _handle_player_joined(self, event: PlayerJoinedEvent) -> List[GameEvent]:
         """处理玩家加入事件"""
@@ -96,6 +97,42 @@ class GameServer:
                 return [DMNarrationEvent("")]
         
         return []
+    
+    async def _handle_start_game(self, event: GameEvent) -> List[GameEvent]:
+        """处理DM开启游戏事件"""
+        player_id = event.data["player_id"]
+        player_name = event.data["player_name"]
+        
+        # 获取房间
+        room = self._get_or_create_room()
+        room_manager = RoomManager(room)
+        
+        # 检查房间中是否有玩家
+        if not room.players:
+            await self.send_message(player_id, "房间中没有玩家，无法开始游戏")
+            return []
+        
+        # 创建新的游戏局
+        try:
+            match = room_manager.create_match("新的冒险")
+            match.status = GameStatus.RUNNING
+            
+            # 获取回合管理器
+            turn_manager = TurnManager(match)
+            
+            # 创建第一个DM回合
+            dm_turn = turn_manager.start_new_turn(TurnType.DM)
+            
+            # 通知所有玩家游戏开始
+            player_ids = [p.id for p in room.players]
+            for pid in player_ids:
+                await self.send_message(pid, f"游戏已开始！DM {player_name} 正在准备第一个场景...")
+            
+            # 触发DM叙述事件
+            return [DMNarrationEvent("")]
+        except ValueError as e:
+            await self.send_message(player_id, f"无法开始游戏: {str(e)}")
+            return []
     
     async def _handle_dm_narration(self, event: DMNarrationEvent) -> List[GameEvent]:
         """处理DM叙述事件"""

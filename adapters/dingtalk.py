@@ -5,7 +5,7 @@ from typing import Optional, Dict, Any, List, Callable
 
 from dingtalk_stream import DingTalkStreamClient, Credential, ChatbotMessage, AckMessage
 from dingtalk_stream.chatbot import ChatbotHandler
-from adapters.base import MessageAdapter, GameEvent, PlayerJoinedEvent, PlayerActionEvent
+from adapters.base import MessageAdapter, GameEvent, PlayerJoinedEvent, PlayerActionEvent, PlayerRequestStartEvent
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,8 @@ class DingTalkHandler(ChatbotHandler):
             if text.startswith('/'):
                 if text == "/加入游戏" or text == "/join":
                     event = PlayerJoinedEvent(player_id, player_name)
-                # 其他命令处理...
+                elif text == "/开始游戏" or text == "/start":
+                    event = PlayerRequestStartEvent(player_id, player_name)
             else:
                 # 普通消息视为玩家行动
                 event = PlayerActionEvent(player_id, text)
