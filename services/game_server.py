@@ -9,6 +9,8 @@ from core.rules import RuleEngine
 from core.events import EventBus
 from adapters.base import MessageAdapter, GameEvent, PlayerJoinedEvent, PlayerActionEvent, DMNarrationEvent
 from services.ai_service import AIService
+from utils.inspector import GameStateInspector
+from utils.web_inspector import WebInspector
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +24,10 @@ class GameServer:
         self.rule_engine = RuleEngine()
         self.event_bus = EventBus()
         self.running = False
+        
+        # 初始化状态检查器
+        self.state_inspector = GameStateInspector(self.game_instance)
+        self.web_inspector = WebInspector(self.state_inspector)
         
         # 注册事件处理器
         self._register_event_handlers()
@@ -186,6 +192,9 @@ class GameServer:
             logger.warning("服务器已经在运行")
             return
             
+        # 启动Web状态检查器
+        await self.web_inspector.start()
+            
         # 启动所有适配器
         for adapter in self.adapters:
             await adapter.start()
@@ -205,6 +214,9 @@ class GameServer:
         # 停止所有适配器
         for adapter in self.adapters:
             await adapter.stop()
+            
+        # 停止Web状态检查器
+        await self.web_inspector.stop()
             
         logger.info("游戏服务器已停止")
 

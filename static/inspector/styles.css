@@ -1,0 +1,300 @@
+/* 全局样式 */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Microsoft YaHei', Arial, sans-serif;
+    background-color: #f5f5f5;
+    color: #333;
+    line-height: 1.6;
+}
+
+#app {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+header {
+    background-color: #2c3e50;
+    color: white;
+    padding: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+h1, h2, h3, h4 {
+    margin-bottom: 0.5rem;
+}
+
+h1 {
+    font-size: 1.5rem;
+}
+
+h2 {
+    color: #2c3e50;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 0.5rem;
+    margin-top: 1rem;
+}
+
+h3 {
+    color: #34495e;
+    margin-top: 1.5rem;
+}
+
+pre {
+    background-color: #f8f8f8;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    padding: 0.5rem;
+    overflow: auto;
+    font-size: 0.9rem;
+}
+
+button {
+    background-color: #3498db;
+    border: none;
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+button:hover {
+    background-color: #2980b9;
+}
+
+.controls {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.refresh-btn {
+    display: flex;
+    align-items: center;
+}
+
+select {
+    padding: 0.3rem;
+    border-radius: 3px;
+    border: 1px solid #ccc;
+}
+
+.last-updated {
+    padding: 0.5rem;
+    background-color: #ecf0f1;
+    text-align: right;
+    font-size: 0.8rem;
+    color: #7f8c8d;
+}
+
+.main-content {
+    display: flex;
+    flex: 1;
+}
+
+.sidebar {
+    width: 250px;
+    background-color: #ecf0f1;
+    padding: 1rem;
+    border-right: 1px solid #ddd;
+}
+
+.content {
+    flex: 1;
+    padding: 1rem;
+    overflow: auto;
+}
+
+.room-list ul, .nav-menu ul {
+    list-style-type: none;
+}
+
+.room-list li, .nav-menu li {
+    padding: 0.5rem;
+    margin: 0.2rem 0;
+    background-color: #ddd;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.room-list li:hover, .nav-menu li:hover {
+    background-color: #bdc3c7;
+}
+
+.room-list li.active, .nav-menu li.active {
+    background-color: #3498db;
+    color: white;
+}
+
+.welcome {
+    text-align: center;
+    padding: 2rem;
+    background-color: #ecf0f1;
+    border-radius: 5px;
+    margin: 1rem;
+}
+
+.info-box {
+    background-color: #ecf0f1;
+    border-radius: 3px;
+    padding: 1rem;
+    margin: 1rem 0;
+}
+
+.info-row {
+    margin-bottom: 0.5rem;
+    display: flex;
+}
+
+.info-row span:first-child {
+    font-weight: bold;
+    min-width: 100px;
+}
+
+.error-view {
+    text-align: center;
+    padding: 2rem;
+    color: #e74c3c;
+}
+
+.turn-list {
+    margin: 1rem 0;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.turn-item {
+    padding: 0.5rem;
+    margin-bottom: 0.5rem;
+    border-radius: 3px;
+    background-color: #f8f8f8;
+    border-left: 4px solid #ddd;
+}
+
+.turn-item.active {
+    border-left-color: #3498db;
+    background-color: #d6eaf8;
+}
+
+.turn-item.completed {
+    opacity: 0.7;
+}
+
+.turn-item.dm {
+    border-left-color: #e74c3c;
+}
+
+.turn-item.player {
+    border-left-color: #2ecc71;
+}
+
+.turn-header {
+    display: flex;
+    justify-content: space-between;
+    font-weight: bold;
+}
+
+.turn-time {
+    font-size: 0.8rem;
+    color: #7f8c8d;
+}
+
+.player-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 1rem 0;
+}
+
+.player-tag {
+    background-color: #3498db;
+    color: white;
+    padding: 0.2rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.9rem;
+}
+
+.actions-box {
+    background-color: #f8f8f8;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    padding: 0.5rem;
+    margin: 1rem 0;
+}
+
+.action-item {
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #eee;
+}
+
+.action-item:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.actor {
+    font-weight: bold;
+    color: #2c3e50;
+}
+
+.player-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.player-card {
+    background-color: white;
+    border-radius: 3px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    padding: 1rem;
+}
+
+.player-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.player-header h3 {
+    margin: 0;
+}
+
+.status-alive {
+    color: #2ecc71;
+    font-weight: bold;
+}
+
+.status-dead {
+    color: #e74c3c;
+    font-weight: bold;
+}
+
+.attributes-grid, .items-list {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.attribute-name {
+    font-weight: bold;
+}
+
+.no-data {
+    color: #7f8c8d;
+    font-style: italic;
+}

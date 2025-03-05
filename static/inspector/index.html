@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>游戏状态检查器</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/vue@3.2.31/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <div id="app">
+        <header>
+            <h1>游戏状态检查器</h1>
+            <div class="controls">
+                <button @click="refreshData" class="refresh-btn">刷新数据</button>
+                <label>
+                    <input type="checkbox" v-model="autoRefresh"> 自动刷新
+                </label>
+                <span v-if="autoRefresh">({{refreshInterval}}秒)</span>
+                <select v-if="autoRefresh" v-model="refreshInterval">
+                    <option value="2">2秒</option>
+                    <option value="5">5秒</option>
+                    <option value="10">10秒</option>
+                    <option value="30">30秒</option>
+                </select>
+            </div>
+        </header>
+        
+        <div class="last-updated">
+            上次更新: {{ lastUpdated }}
+        </div>
+        
+        <div class="main-content">
+            <div class="sidebar">
+                <div class="room-list" v-if="gameState.rooms && gameState.rooms.length">
+                    <h2>房间列表</h2>
+                    <ul>
+                        <li v-for="room in gameState.rooms" 
+                            :key="room.id" 
+                            :class="{active: selectedRoom && selectedRoom.id === room.id}"
+                            @click="selectRoom(room)">
+                            {{ room.name }}
+                        </li>
+                    </ul>
+                </div>
+                <div class="nav-menu" v-if="selectedRoom">
+                    <h2>查看选项</h2>
+                    <ul>
+                        <li :class="{active: currentView === 'room'}" @click="currentView = 'room'">房间信息</li>
+                        <li :class="{active: currentView === 'match'}" @click="currentView = 'match'">比赛信息</li>
+                        <li :class="{active: currentView === 'turn'}" @click="currentView = 'turn'">回合信息</li>
+                        <li :class="{active: currentView === 'players'}" @click="currentView = 'players'">玩家信息</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="content">
+                <div v-if="!selectedRoom" class="welcome">
+                    <h2>欢迎使用游戏状态检查器</h2>
+                    <p>从左侧选择一个房间开始查看游戏状态</p>
+                </div>
+                
+                <div v-if="selectedRoom && currentView === 'room'" class="room-view">
+                    <h2>房间: {{ selectedRoom.name }}</h2>
+                    <div class="info-box">
+                        <div class="info-row"><span>ID:</span> {{ selectedRoom.id }}</div>
+                        <div class="info-row"><span>创建时间:</span> {{ formatDate(selectedRoom.created_at) }}</div>
+                        <div class="info-row"><span>玩家数:</span> {{ selectedRoom.players.length }}</div>
+                        <div class="info-row"><span>当前比赛:</span> {{ selectedRoom.current_match_id || '无' }}</div>
+                    </div>
+                    
+                    <h3>房间设置</h3>
+                    <pre>{{ JSON.stringify(selectedRoom.settings, null, 2) }}</pre>
+                </div>
+                
+                <div v-if="selectedRoom && currentView === 'match' && currentMatch" class="match-view">
+                    <h2>当前比赛</h2>
+                    <div class="info-box">
+                        <div class="info-row"><span>ID:</span> {{ currentMatch.id }}</div>
+                        <div class="info-row"><span>场景:</span> {{ currentMatch.scene }}</div>
+                        <div class="info-row"><span>状态:</span> {{ currentMatch.status }}</div>
+                        <div class="info-row"><span>创建时间:</span> {{ formatDate(currentMatch.created_at) }}</div>
+                        <div class="info-row"><span>当前回合:</span> {{ currentMatch.current_turn_id || '无' }}</div>
+                    </div>
+                    
+                    <h3>游戏状态</h3>
+                    <pre>{{ JSON.stringify(currentMatch.game_state, null, 2) }}</pre>
+                    
+                    <h3>回合历史 ({{ currentMatch.turns.length }})</h3>
+                    <div class="turn-list">
+                        <div v-for="turn in currentMatch.turns" 
+                             :key="turn.id" 
+                             class="turn-item"
+                             :class="{
+                                active: currentMatch.current_turn_id === turn.id,
+                                completed: turn.status === 'COMPLETED',
+                                dm: turn.turn_type === 'DM',
+                                player: turn.turn_type === 'PLAYER'
+                             }">
+                            <div class="turn-header">
+                                <span class="turn-id">{{ turn.id.substr(-6) }}</span>
+                                <span class="turn-type">{{ turn.turn_type }}</span>
+                                <span class="turn-status">{{ turn.status }}</span>
+                            </div>
+                            <div class="turn-time">
+                                {{ formatTime(turn.created_at) }}
+                                <span v-if="turn.completed_at"> → {{ formatTime(turn.completed_at) }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div v-if="selectedRoom && currentView === 'match' && !currentMatch" class="error-view">
+                    <h2>没有进行中的比赛</h2>
+                </div>
+                
+                <div v-if="selectedRoom && currentView === 'turn' && currentTurn" class="turn-view">
+                    <h2>当前回合</h2>
+                    <div class="info-box">
+                        <div class="info-row"><span>ID:</span> {{ currentTurn.id }}</div>
+                        <div class="info-row"><span>类型:</span> {{ currentTurn.turn_type }}</div>
+                        <div class="info-row"><span>状态:</span> {{ currentTurn.status }}</div>
+                        <div class="info-row"><span>创建时间:</span> {{ formatDate(currentTurn.created_at) }}</div>
+                        <div class="info-row" v-if="currentTurn.completed_at">
+                            <span>完成时间:</span> {{ formatDate(currentTurn.completed_at) }}
+                        </div>
+                    </div>
+                    
+                    <h3>激活玩家</h3>
+                    <div class="player-tags">
+                        <span v-for="playerId in currentTurn.active_players" :key="playerId" class="player-tag">
+                            {{ getPlayerName(playerId) }}
+                        </span>
+                        <span v-if="!currentTurn.active_players.length" class="no-data">无</span>
+                    </div>
+                    
+                    <h3>行动记录</h3>
+                    <div class="actions-box">
+                        <div v-for="(action, actorId) in currentTurn.actions" :key="actorId" class="action-item">
+                            <div class="actor">{{ actorId === 'dm_narration' ? 'DM' : getPlayerName(actorId) }}:</div>
+                            <div class="action-content">{{ action }}</div>
+                        </div>
+                        <div v-if="!Object.keys(currentTurn.actions).length" class="no-data">无行动记录</div>
+                    </div>
+                    
+                    <h3>下一回合信息</h3>
+                    <pre>{{ JSON.stringify(currentTurn.next_turn_info, null, 2) }}</pre>
+                </div>
+                
+                <div v-if="selectedRoom && currentView === 'turn' && !currentTurn" class="error-view">
+                    <h2>没有活动回合</h2>
+                </div>
+                
+                <div v-if="selectedRoom && currentView === 'players'" class="players-view">
+                    <h2>玩家列表 ({{ selectedRoom.players.length }})</h2>
+                    
+                    <div class="player-list">
+                        <div v-for="player in selectedRoom.players" :key="player.id" class="player-card">
+                            <div class="player-header">
+                                <h3>{{ player.name }}</h3>
+                                <span :class="{'status-alive': player.alive, 'status-dead': !player.alive}">
+                                    {{ player.alive ? '存活' : '死亡' }}
+                                </span>
+                            </div>
+                            
+                            <div class="info-box">
+                                <div class="info-row"><span>ID:</span> {{ player.id }}</div>
+                                <div class="info-row"><span>加入时间:</span> {{ formatDate(player.joined_at) }}</div>
+                                <div class="info-row"><span>生命值:</span> {{ player.health }}</div>
+                            </div>
+                            
+                            <div class="player-attributes">
+                                <h4>属性</h4>
+                                <div v-if="Object.keys(player.attributes).length" class="attributes-grid">
+                                    <div v-for="(value, key) in player.attributes" :key="key" class="attribute">
+                                        <span class="attribute-name">{{ key }}:</span>
+                                        <span class="attribute-value">{{ value }}</span>
+                                    </div>
+                                </div>
+                                <div v-else class="no-data">无属性</div>
+                            </div>
+                            
+                            <div class="player-items">
+                                <h4>物品</h4>
+                                <div v-if="player.items.length" class="items-list">
+                                    <div v-for="(item, index) in player.items" :key="index" class="item">
+                                        {{ item }}
+                                    </div>
+                                </div>
+                                <div v-else class="no-data">无物品</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>

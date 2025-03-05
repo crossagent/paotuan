@@ -7,12 +7,12 @@ services:
     restart: unless-stopped
     volumes:
       - ./config:/app/config
+      - ./static:/app/static
     environment:
       - OPENAI_API_KEY=your_api_key_here
       - OPENAI_MODEL=gpt-3.5-turbo
       - OPENAI_TEMP=0.7
       - DINGTALK_CLIENT_ID=your_client_id_here
       - DINGTALK_CLIENT_SECRET=your_client_secret_here
-    # 如果需要暴露端口，取消下面的注释
-    # ports:
-    #   - "8080:8080"
+    ports:
+      - "54232:54232"  # 状态检查器Web界面端口
