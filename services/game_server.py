@@ -224,8 +224,8 @@ class GameServer:
     async def _process_event(self, event: GameEvent) -> None:
         """处理事件"""
         try:
-            # 发布到事件总线
-            responses = self.event_bus.publish(event)
+            # 发布到事件总线 - 使用await等待异步结果
+            responses = await self.event_bus.publish(event)
             
             # 处理响应
             for response in responses:

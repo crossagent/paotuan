@@ -4,22 +4,36 @@ import os
 from typing import Optional, Dict, Any, List, Callable
 
 from dingtalk_stream import DingTalkStreamClient, Credential, ChatbotMessage, AckMessage
+from dingtalk_stream.chatbot import ChatbotHandler
 from adapters.base import MessageAdapter, GameEvent, PlayerJoinedEvent, PlayerActionEvent
 
 logger = logging.getLogger(__name__)
 
-class DingTalkHandler:
-    """钉钉消息处理器"""
+class DingTalkHandler(ChatbotHandler):
+    """钉钉消息处理器，符合SDK规范"""
     
-    def __init__(self, callback: Callable):
-        self.callback = callback
+    def __init__(self, callback_func: Callable):
+        super().__init__()
+        self.callback_func = callback_func
         self.reply_map: Dict[str, ChatbotMessage] = {}
         
-    async def process(self, callback: Any) -> tuple[str, str]:
+    async def raw_process(self, callback: Any) -> AckMessage:
+        """处理原始回调消息"""
+        try:
+            message = ChatbotMessage.from_dict(callback.data)
+            await self.process(message)
+            ack_message = AckMessage()
+            ack_message.code = AckMessage.STATUS_OK
+            return ack_message
+        except Exception as e:
+            logger.exception(f"处理钉钉消息失败: {str(e)}")
+            ack_message = AckMessage()
+            ack_message.code = AckMessage.STATUS_OK
+            return ack_message # 即使处理失败也返回OK，避免重试
+    
+    async def process(self, message: ChatbotMessage) -> None:
         """处理钉钉消息"""
         try:
-            # 解析消息
-            message = ChatbotMessage.from_dict(callback.data)
             text = message.text.content.strip()
             player_id = message.sender_staff_id
             player_name = message.sender_nick
@@ -39,22 +53,10 @@ class DingTalkHandler:
             
             # 调用回调处理事件
             if event:
-                await self.callback(event)
+                await self.callback_func(event)
                 
-            return AckMessage.STATUS_OK, 'OK'
         except Exception as e:
             logger.exception(f"处理钉钉消息失败: {str(e)}")
-            return AckMessage.STATUS_OK, 'ERROR'
-    
-    def reply_text(self, player_id: str, content: str) -> None:
-        """回复文本消息"""
-        if player_id not in self.reply_map:
-            logger.warning(f"找不到玩家消息: {player_id}")
-            return
-            
-        message = self.reply_map[player_id]
-        message.reply_text(content)
-        logger.debug(f"回复消息: {player_id}, {content}")
 
 class DingTalkAdapter(MessageAdapter):
     """钉钉适配器"""
@@ -67,6 +69,7 @@ class DingTalkAdapter(MessageAdapter):
         self.handler = None
         self.event_queue = asyncio.Queue()
         self.running = False
+        self._client_task = None
         
     async def start(self) -> None:
         """启动适配器"""
@@ -89,27 +92,34 @@ class DingTalkAdapter(MessageAdapter):
         
         # 启动客户端
         self.running = True
-        asyncio.create_task(self._run_client())
+        self._client_task = asyncio.create_task(self._run_client())
         logger.info("钉钉适配器已启动")
     
     async def _run_client(self) -> None:
         """运行钉钉客户端"""
-        while self.running:
-            try:
-                # 由于dingtalk_stream不支持异步，我们在单独的线程中运行
-                self.client.start_forever()
-            except Exception as e:
+        try:
+            # 由于dingtalk_stream不支持异步，使用线程池执行
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self.client.start_forever)
+        except Exception as e:
+            if self.running:
                 logger.error(f"钉钉客户端异常: {str(e)}")
-                if self.running:
-                    await asyncio.sleep(10)  # 等待10秒后重试
     
     async def stop(self) -> None:
         """停止适配器"""
         self.running = False
-        if self.client:
-            # 没有优雅停止的方法，只能重置
-            self.client = None
-            self.handler = None
+        
+        # 取消客户端任务
+        if self._client_task:
+            self._client_task.cancel()
+            try:
+                await self._client_task
+            except asyncio.CancelledError:
+                pass
+                
+        # 重置客户端和处理器
+        self.client = None
+        self.handler = None
         logger.info("钉钉适配器已停止")
     
     async def _on_message(self, event: GameEvent) -> None:
@@ -133,4 +143,9 @@ class DingTalkAdapter(MessageAdapter):
             logger.warning("钉钉处理器未初始化，无法发送消息")
             return
             
-        self.handler.reply_text(player_id, content)
+        if player_id not in self.handler.reply_map:
+            logger.warning(f"找不到玩家消息: {player_id}")
+            return
+            
+        message = self.handler.reply_map[player_id]
+        self.handler.reply_text(content, message)
