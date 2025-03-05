@@ -1,6 +1,6 @@
 from enum import Enum, auto
 from pydantic import BaseModel
-from typing import Dict, List, Optional, Any, Literal
+from typing import Dict, List, Optional, Any, Literal, Union
 from datetime import datetime
 
 class GameStatus(str, Enum):
@@ -35,23 +35,33 @@ class NextTurnInfo(BaseModel):
     turn_type: TurnType  # 下一回合类型（DM或PLAYER）
     active_players: List[str] = []  # 下一回合激活的玩家ID列表（仅在turn_type为PLAYER时有意义）
 
-class Turn(BaseModel):
-    """回合模型"""
+class BaseTurn(BaseModel):
+    """基础回合模型"""
     id: str
     turn_type: TurnType
     status: TurnStatus = TurnStatus.PENDING
     created_at: datetime = datetime.now()
     completed_at: Optional[datetime] = None
-    active_players: List[str] = []
-    actions: Dict[str, str] = {}
     next_turn_info: Optional[NextTurnInfo] = None  # 下一回合信息，包含回合类型和激活玩家
-    
-    # 回合模式，只在turn_type为PLAYER时有意义
-    turn_mode: Optional[Literal["action", "dice"]] = None
-    
-    # 掷骰子相关字段，只在turn_mode为"dice"时有意义
-    difficulty: Optional[int] = None  # 掷骰子难度
-    dice_results: Dict[str, Dict[str, Any]] = {}  # 玩家ID -> {roll: 骰子结果, success: 是否成功, difficulty: 难度, action: 玩家行动}
+
+class DMTurn(BaseTurn):
+    """DM回合模型"""
+    narration: str = ""  # DM的叙述内容
+
+class ActionTurn(BaseTurn):
+    """玩家行动回合模型"""
+    active_players: List[str] = []
+    actions: Dict[str, str] = {}  # 玩家ID -> 行动描述
+
+class DiceTurn(BaseTurn):
+    """掷骰子回合模型"""
+    active_players: List[str] = []
+    difficulty: int  # 掷骰子难度
+    action_desc: str  # 行动类型描述（如"攀爬"、"说服"等）
+    dice_results: Dict[str, Dict[str, Any]] = {}  # 玩家ID -> {roll, success, difficulty, action}
+
+# 为了向后兼容，保留Turn类，但使用Union类型
+Turn = Union[BaseTurn, DMTurn, ActionTurn, DiceTurn]
 
 class Match(BaseModel):
     """游戏局模型"""
@@ -59,7 +69,7 @@ class Match(BaseModel):
     status: GameStatus = GameStatus.WAITING
     scene: str
     created_at: datetime = datetime.now()
-    turns: List[Turn] = []
+    turns: List[Union[BaseTurn, DMTurn, ActionTurn, DiceTurn]] = []
     current_turn_id: Optional[str] = None
     game_state: Dict[str, Any] = {}
 

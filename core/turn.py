@@ -1,9 +1,9 @@
-from typing import Dict, List, Optional, Any, Literal
+from typing import Dict, List, Optional, Any, Literal, Union, cast
 import uuid
 import logging
 from datetime import datetime
 
-from models.entities import Match, Turn, TurnType, TurnStatus, Player, NextTurnInfo
+from models.entities import Match, BaseTurn, DMTurn, ActionTurn, DiceTurn, TurnType, TurnStatus, Player, NextTurnInfo
 from core.rules import RuleEngine
 from adapters.base import GameEvent, PlayerActionEvent, DMNarrationEvent
 
@@ -17,32 +17,46 @@ class TurnManager:
         
     def start_new_turn(self, turn_type: TurnType, active_players: List[str] = None, 
                       turn_mode: Optional[Literal["action", "dice"]] = None,
-                      difficulty: Optional[int] = None) -> Turn:
+                      difficulty: Optional[int] = None,
+                      action_desc: Optional[str] = None) -> Union[DMTurn, ActionTurn, DiceTurn]:
         """开始新回合"""
         turn_id = str(uuid.uuid4())
         
-        # 初始化新回合
-        new_turn = Turn(
-            id=turn_id,
-            turn_type=turn_type,
-            active_players=active_players or []
-        )
-        
-        # 如果是玩家回合，设置回合模式
-        if turn_type == TurnType.PLAYER and turn_mode:
-            new_turn.turn_mode = turn_mode
-            
-            # 如果是掷骰子回合，设置难度
-            if turn_mode == "dice" and difficulty is not None:
-                new_turn.difficulty = difficulty
+        # 根据回合类型创建相应的回合对象
+        if turn_type == TurnType.DM:
+            new_turn = DMTurn(
+                id=turn_id,
+                turn_type=turn_type
+            )
+            logger.info(f"开始新DM回合: ID: {turn_id}")
+        elif turn_type == TurnType.PLAYER:
+            if turn_mode == "dice":
+                if difficulty is None:
+                    raise ValueError("掷骰子回合必须指定难度")
+                new_turn = DiceTurn(
+                    id=turn_id,
+                    turn_type=turn_type,
+                    active_players=active_players or [],
+                    difficulty=difficulty,
+                    action_desc=action_desc or "行动"
+                )
+                logger.info(f"开始新掷骰子回合: 难度: {difficulty}, 行动描述: {action_desc or '行动'}, ID: {turn_id}")
+            else:  # 普通行动回合
+                new_turn = ActionTurn(
+                    id=turn_id,
+                    turn_type=turn_type,
+                    active_players=active_players or []
+                )
+                logger.info(f"开始新行动回合: ID: {turn_id}")
+        else:
+            raise ValueError(f"不支持的回合类型: {turn_type}")
         
         self.match.turns.append(new_turn)
         self.match.current_turn_id = turn_id
         
-        logger.info(f"开始新回合: {turn_type} (模式: {turn_mode or 'N/A'}, ID: {turn_id})")
         return new_turn
     
-    def get_current_turn(self) -> Optional[Turn]:
+    def get_current_turn(self) -> Optional[Union[DMTurn, ActionTurn, DiceTurn]]:
         """获取当前回合"""
         if not self.match.current_turn_id:
             return None
@@ -92,19 +106,19 @@ class TurnManager:
             return False
             
         # 检查玩家是否在激活列表中
-        if player_id not in current_turn.active_players:
+        if not hasattr(current_turn, 'active_players') or player_id not in current_turn.active_players:
             logger.warning(f"玩家不在激活列表中: {player_id}")
             return False
         
-        # 根据回合模式处理玩家行动
-        if current_turn.turn_mode == "action" or current_turn.turn_mode is None:
+        # 根据回合类型处理玩家行动
+        if isinstance(current_turn, ActionTurn):
             # 普通行动回合：记录玩家行动
             current_turn.actions[player_id] = action
             logger.info(f"记录玩家行动: {player_id}, {action}")
         
-        elif current_turn.turn_mode == "dice":
+        elif isinstance(current_turn, DiceTurn):
             # 掷骰子回合：不记录action，直接进行掷骰子
-            difficulty = current_turn.difficulty or 10  # 默认难度为10
+            difficulty = current_turn.difficulty  # 从DiceTurn获取难度
             
             # 使用规则引擎处理掷骰子
             rule_engine = RuleEngine()
@@ -119,6 +133,9 @@ class TurnManager:
             }
             
             logger.info(f"玩家 {player_id} 尝试: {action}, 掷骰子结果: {roll}, 难度: {difficulty}, {'成功' if success else '失败'}")
+        else:
+            logger.warning(f"不支持的玩家回合类型: {type(current_turn)}")
+            return False
         
         # 检查是否所有玩家都已行动
         if self.all_players_acted():
@@ -134,9 +151,14 @@ class TurnManager:
         if not current_turn:
             return False
         
-        if current_turn.turn_mode == "dice":
+        if not hasattr(current_turn, 'active_players'):
+            return True  # 如果没有激活玩家列表，认为已完成
+        
+        if isinstance(current_turn, DiceTurn):
             # 掷骰子回合：检查所有玩家是否都有掷骰子结果
             return set(current_turn.dice_results.keys()) == set(current_turn.active_players)
-        else:
-            # 其他回合类型：检查actions
+        elif isinstance(current_turn, ActionTurn):
+            # 行动回合：检查actions
             return set(current_turn.actions.keys()) == set(current_turn.active_players)
+        else:
+            return True  # 其他类型回合默认完成

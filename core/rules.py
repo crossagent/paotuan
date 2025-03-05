@@ -2,7 +2,7 @@ from typing import Dict, List, Optional, Any, Tuple, Union
 import random
 import logging
 
-from models.entities import Player, Match, Turn, TurnType
+from models.entities import Player, Match, Turn, TurnType, DiceTurn
 
 logger = logging.getLogger(__name__)
 
@@ -31,15 +31,15 @@ class RuleEngine:
         # 更新存活状态
         player.alive = player.health > 0
         
-    def process_dice_turn_results(self, turn: Turn) -> Dict[str, Any]:
-        """处理掷骰子回合的结果，返回处理后的综合结果"""
-        if turn.turn_type != TurnType.PLAYER or turn.turn_mode != "dice":
-            logger.warning(f"尝试处理非掷骰子回合: {turn.turn_type}, 模式: {getattr(turn, 'turn_mode', 'None')}")
-            return {}
+    def process_dice_turn_results(self, turn: DiceTurn) -> Dict[str, Any]:
+        """处理掷骰子回合的结果，返回处理后的综合结果
         
-        # 汇总所有玩家的掷骰子结果
+        注意：每个玩家投出的骰子只对自己生效，这里只是为了显示而汇总结果
+        """
+        # 汇总所有玩家的掷骰子结果，添加行动描述
         results = {
-            "summary": []
+            "summary": [],
+            "action_desc": turn.action_desc  # 添加行动描述
         }
         
         for player_id, dice_result in turn.dice_results.items():
