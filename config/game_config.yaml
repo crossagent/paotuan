@@ -1,0 +1,36 @@
+# 游戏配置
+game:
+  # 每个回合的最大等待时间（秒）
+  turn_timeout: 300
+  
+  # 游戏规则
+  rules:
+    # 默认检定难度
+    default_difficulty: 10
+    
+    # 玩家初始属性
+    initial_attributes:
+      health: 100
+      
+    # 物品效果
+    item_effects:
+      治疗药水: 
+        health: 20
+      魔力药水:
+        mana: 30
+
+# 房间设置
+room:
+  # 最大玩家数
+  max_players: 10
+  
+  # 房间超时时间（分钟）
+  timeout: 120
+  
+  # 默认场景
+  default_scene: "你们站在一个宽敞的大厅中央，四周的火把照亮了这个空间。前方有几条岔路，不知通向何处。"
+
+# 系统设置
+system:
+  # 自动清理未活动房间（小时）
+  cleanup_inactive_rooms: 24

@@ -1,0 +1,60 @@
+from typing import Dict, List, Optional, Any
+import uuid
+import logging
+from datetime import datetime
+
+from models.entities import Room, Match, Player, GameStatus, Turn, TurnType, TurnStatus
+from adapters.base import GameEvent, PlayerJoinedEvent, PlayerActionEvent
+
+logger = logging.getLogger(__name__)
+
+class RoomManager:
+    """房间管理器"""
+    
+    def __init__(self, room: Room):
+        self.room = room
+        
+    def add_player(self, player_id: str, player_name: str) -> Player:
+        """添加玩家到房间"""
+        # 检查玩家是否已存在
+        for player in self.room.players:
+            if player.id == player_id:
+                logger.info(f"玩家已在房间中: {player_name} (ID: {player_id})")
+                return player
+                
+        # 创建新玩家
+        new_player = Player(id=player_id, name=player_name)
+        self.room.players.append(new_player)
+        logger.info(f"玩家加入房间: {player_name} (ID: {player_id})")
+        return new_player
+    
+    def create_match(self, scene: str) -> Match:
+        """创建新游戏局"""
+        # 检查是否有进行中的游戏局
+        if self.room.current_match_id:
+            current_match = self.get_current_match()
+            if current_match and current_match.status == GameStatus.RUNNING:
+                raise ValueError("当前已有进行中的游戏局")
+                
+        # 创建新游戏局
+        match_id = str(uuid.uuid4())
+        new_match = Match(id=match_id, scene=scene)
+        self.room.matches.append(new_match)
+        self.room.current_match_id = match_id
+        logger.info(f"创建新游戏局: {scene} (ID: {match_id})")
+        return new_match
+    
+    def get_current_match(self) -> Optional[Match]:
+        """获取当前游戏局"""
+        if not self.room.current_match_id:
+            return None
+            
+        for match in self.room.matches:
+            if match.id == self.room.current_match_id:
+                return match
+                
+        return None
+        
+    def list_players(self) -> List[Player]:
+        """列出房间中的所有玩家"""
+        return self.room.players
