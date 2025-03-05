@@ -6,6 +6,7 @@ from typing import Optional, Dict, Any, List, Callable
 from dingtalk_stream import DingTalkStreamClient, Credential, ChatbotMessage, AckMessage
 from dingtalk_stream.chatbot import ChatbotHandler
 from adapters.base import MessageAdapter, GameEvent, PlayerJoinedEvent, PlayerActionEvent, PlayerRequestStartEvent
+from adapters.command_handler import CommandHandler
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,25 @@ class DingTalkHandler(ChatbotHandler):
         super().__init__()
         self.callback_func = callback_func
         self.reply_map: Dict[str, ChatbotMessage] = {}
+        self.cmd_handler = CommandHandler()
+        
+        # 注册基本命令
+        self.cmd_handler.register(
+            "/加入游戏", ["/join"], 
+            lambda pid, pname, args: PlayerJoinedEvent(pid, pname),
+            "加入游戏"
+        )
+        self.cmd_handler.register(
+            "/开始游戏", ["/start"], 
+            lambda pid, pname, args: PlayerRequestStartEvent(pid, pname),
+            "开始游戏"
+        )
+        # 注册帮助命令
+        self.cmd_handler.register(
+            "/help", ["/帮助"], 
+            lambda pid, pname, args: None,  # 帮助命令不生成事件
+            "显示帮助信息"
+        )
         
     async def raw_process(self, callback: Any) -> AckMessage:
         """处理原始回调消息"""
@@ -43,11 +63,19 @@ class DingTalkHandler(ChatbotHandler):
             
             # 解析为游戏事件
             event = None
+            response = None
+            
             if text.startswith('/'):
-                if text == "/加入游戏" or text == "/join":
-                    event = PlayerJoinedEvent(player_id, player_name)
-                elif text == "/开始游戏" or text == "/start":
-                    event = PlayerRequestStartEvent(player_id, player_name)
+                # 使用命令处理器处理命令
+                event, response = self.cmd_handler.process(text, player_id, player_name)
+                
+                # 特殊处理帮助命令
+                if text == "/help" or text == "/帮助":
+                    response = self.cmd_handler.get_help()
+                
+                # 如果有需要回复的消息
+                if response:
+                    self.reply_text(response, message)
             else:
                 # 普通消息视为玩家行动
                 event = PlayerActionEvent(player_id, text)
