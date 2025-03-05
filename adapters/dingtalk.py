@@ -168,12 +168,20 @@ class DingTalkAdapter(MessageAdapter):
     
     async def send_message(self, player_id: str, content: str) -> None:
         """发送消息"""
+        # 记录当前调用的来源以及参数
+        import traceback
+        call_stack = traceback.format_stack()
+        logger.debug(f"发送消息调用栈: {call_stack}")
+        logger.debug(f"发送消息参数: player_id={player_id}, content={content}")
+        
         if not self.handler:
             logger.warning("钉钉处理器未初始化，无法发送消息")
             return
             
         if player_id not in self.handler.reply_map:
+            # 输出更详细的信息用于调试
             logger.warning(f"找不到玩家消息: {player_id}")
+            logger.debug(f"当前reply_map中的键: {list(self.handler.reply_map.keys())}")
             return
             
         message = self.handler.reply_map[player_id]

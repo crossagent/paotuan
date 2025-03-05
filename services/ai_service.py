@@ -66,6 +66,8 @@ class OpenAIService(AIService):
 
             根据以上信息推进故事发展。判断是否需要属性检定，会修改到属性或消耗物品的行为一定要进行判定。
 
+            注意：active_players字段必须使用玩家ID而不是玩家名称。有效的玩家ID列表：{player_ids}
+
             {format_instructions}
             """
         )
@@ -79,6 +81,7 @@ class OpenAIService(AIService):
                 "players": context.get("players", ""),
                 "player_actions": context.get("player_actions", ""),
                 "history": context.get("history", ""),
+                "player_ids": context.get("player_ids", []),
                 "format_instructions": self.output_parser.get_format_instructions()
             }
             

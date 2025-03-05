@@ -196,7 +196,8 @@ class GameServer:
             "players": ", ".join(player_names),
             "player_actions": previous_actions or "没有玩家行动",
             "history": "（历史记录将在这里添加）", # 实际实现需要保存历史记录
-            "dice_results": dice_results  # 添加掷骰子结果
+            "dice_results": dice_results,  # 添加掷骰子结果
+            "player_ids": player_ids  # 添加玩家ID列表
         }
         
         # 调用AI服务
