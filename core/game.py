@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 import uuid
 import logging
 from datetime import datetime
@@ -16,6 +16,52 @@ class GameInstance:
         self.game_id = game_id
         self.rooms: Dict[str, Room] = {}
         self.event_bus = EventBus()
+        
+    def get_available_scenarios(self) -> List[Dict[str, str]]:
+        """获取可用的剧本列表
+        
+        Returns:
+            剧本列表，每个剧本包含id和name
+        """
+        from utils.scenario_loader import ScenarioLoader
+        scenario_loader = ScenarioLoader()
+        return scenario_loader.list_scenarios()
+    
+    def set_room_scenario(self, room_id: str, scenario_id: str) -> Tuple[bool, str]:
+        """为指定房间设置剧本
+        
+        Args:
+            room_id: 房间ID
+            scenario_id: 剧本ID
+            
+        Returns:
+            (是否设置成功, 消息)
+        """
+        room = self.get_room(room_id)
+        if not room:
+            return False, f"房间不存在: {room_id}"
+            
+        # 检查剧本是否存在
+        from utils.scenario_loader import ScenarioLoader
+        scenario_loader = ScenarioLoader()
+        scenario = scenario_loader.load_scenario(scenario_id)
+        
+        if not scenario:
+            return False, f"剧本不存在: {scenario_id}"
+            
+        # 获取当前游戏局
+        if not room.current_match_id:
+            return False, "当前没有进行中的游戏局"
+            
+        for match in room.matches:
+            if match.id == room.current_match_id:
+                # 设置剧本ID和场景
+                match.scenario_id = scenario_id
+                match.scene = scenario.scene
+                logger.info(f"为房间 {room.name} 设置剧本: {scenario.name}")
+                return True, f"成功设置剧本: {scenario.name}"
+                
+        return False, "找不到当前游戏局"
         
     def create_room(self, name: str) -> Room:
         """创建新房间"""

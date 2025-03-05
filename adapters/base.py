@@ -48,6 +48,17 @@ class DMNarrationEvent(GameEvent):
             data={"narration": narration}
         )
 
+class SetScenarioEvent(GameEvent):
+    """设置剧本事件"""
+    def __init__(self, player_id: str, scenario_id: str):
+        super().__init__(
+            event_type="SET_SCENARIO",
+            data={
+                "player_id": player_id,
+                "scenario_id": scenario_id
+            }
+        )
+
 class MessageAdapter(ABC):
     """消息适配器抽象基类"""
     

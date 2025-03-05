@@ -29,6 +29,7 @@ class Player(BaseModel):
     alive: bool = True
     attributes: Dict[str, Any] = {}
     items: List[str] = []
+    location: Optional[str] = None  # 玩家当前位置，格式为"楼层/房间"
 
 class NextTurnInfo(BaseModel):
     """下一回合信息模型"""
@@ -72,6 +73,7 @@ class Match(BaseModel):
     turns: List[Union[BaseTurn, DMTurn, ActionTurn, DiceTurn]] = []
     current_turn_id: Optional[str] = None
     game_state: Dict[str, Any] = {}
+    scenario_id: Optional[str] = None  # 关联的剧本ID
 
 class Room(BaseModel):
     """房间模型"""

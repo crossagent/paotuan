@@ -7,7 +7,7 @@ from core.room import RoomManager
 from core.turn import TurnManager
 from core.rules import RuleEngine
 from core.events import EventBus
-from adapters.base import MessageAdapter, GameEvent, PlayerJoinedEvent, PlayerActionEvent, DMNarrationEvent
+from adapters.base import MessageAdapter, GameEvent, PlayerJoinedEvent, PlayerActionEvent, DMNarrationEvent, SetScenarioEvent
 from services.ai_service import AIService
 from utils.inspector import GameStateInspector
 from utils.web_inspector import WebInspector
@@ -38,6 +38,7 @@ class GameServer:
         self.event_bus.subscribe("PLAYER_ACTION", self._handle_player_action)
         self.event_bus.subscribe("DM_NARRATION", self._handle_dm_narration)
         self.event_bus.subscribe("START_MATCH", self._handle_start_game)
+        self.event_bus.subscribe("SET_SCENARIO", self._handle_set_scenario)
     
     async def _handle_player_joined(self, event: PlayerJoinedEvent) -> List[GameEvent]:
         """处理玩家加入事件"""
@@ -169,6 +170,46 @@ class GameServer:
             await self.send_message(player_id, f"无法开始游戏: {str(e)}")
             return []
     
+    async def _handle_set_scenario(self, event: SetScenarioEvent) -> List[GameEvent]:
+        """处理设置剧本事件"""
+        player_id = event.data["player_id"]
+        scenario_id = event.data["scenario_id"]
+        
+        logger.info(f"处理设置剧本事件: 玩家ID={player_id}, 剧本ID={scenario_id}")
+        
+        # 获取房间
+        room = self._get_or_create_room()
+        
+        # 检查剧本是否存在
+        from utils.scenario_loader import ScenarioLoader
+        scenario_loader = ScenarioLoader()
+        scenario = scenario_loader.load_scenario(scenario_id)
+        
+        if not scenario:
+            await self.send_message(player_id, f"剧本不存在: {scenario_id}")
+            return []
+            
+        # 设置剧本
+        room_manager = RoomManager(room)
+        success = room_manager.set_scenario(scenario_id)
+        
+        if success:
+            # 通知所有玩家
+            for p in room.players:
+                await self.send_message(p.id, f"DM设置了新剧本: {scenario.name}")
+                
+            # 如果当前是DM回合，触发DM叙述事件以更新场景
+            current_match = room_manager.get_current_match()
+            if current_match:
+                turn_manager = TurnManager(current_match)
+                current_turn = turn_manager.get_current_turn()
+                if current_turn and current_turn.turn_type == TurnType.DM:
+                    return [DMNarrationEvent("")]
+        else:
+            await self.send_message(player_id, "设置剧本失败，请确保游戏已经开始")
+            
+        return []
+    
     async def _handle_dm_narration(self, event: DMNarrationEvent) -> List[GameEvent]:
         """处理DM叙述事件"""
         # 获取房间和游戏局
@@ -221,10 +262,89 @@ class GameServer:
             "player_ids": player_ids  # 添加玩家ID列表
         }
         
+        # 加载剧本（如果有）
+        scenario = None
+        if match.scenario_id:
+            from utils.scenario_loader import ScenarioLoader
+            scenario_loader = ScenarioLoader()
+            scenario = scenario_loader.load_scenario(match.scenario_id)
+            if scenario:
+                logger.info(f"加载剧本: {scenario.name}, 当前剧情节点: {scenario.current_plot_point + 1}/{len(scenario.plot_points)}")
+        
         # 调用AI服务
-        response = await self.ai_service.generate_narration(context)
+        response = await self.ai_service.generate_narration(context, scenario)
         
         # 处理AI响应
+        # 处理位置更新
+        if hasattr(response, 'location_updates') and response.location_updates:
+            for location_update in response.location_updates:
+                player_id = location_update.player_id
+                new_location = location_update.new_location
+                
+                # 更新玩家位置
+                for player in room.players:
+                    if player.id == player_id:
+                        player.location = new_location
+                        logger.info(f"更新玩家位置: 玩家={player.name}({player_id}), 新位置={new_location}")
+                        
+                        # 如果有剧本，也更新剧本中的玩家位置
+                        if scenario:
+                            scenario.player_location = new_location
+                            from utils.scenario_loader import ScenarioLoader
+                            scenario_loader = ScenarioLoader()
+                            scenario_loader.save_scenario(scenario)
+                            logger.info(f"更新剧本中的玩家位置: 新位置={new_location}")
+                        break
+        
+        # 处理物品更新
+        if hasattr(response, 'item_updates') and response.item_updates:
+            for item_update in response.item_updates:
+                player_id = item_update.player_id
+                item = item_update.item
+                action = item_update.action
+                
+                # 更新玩家物品
+                for player in room.players:
+                    if player.id == player_id:
+                        if action == "add" and item not in player.items:
+                            player.items.append(item)
+                            logger.info(f"玩家获得物品: 玩家={player.name}({player_id}), 物品={item}")
+                            
+                            # 如果有剧本，也更新剧本中的已收集道具
+                            if scenario and item not in scenario.collected_items:
+                                scenario.collected_items.append(item)
+                                from utils.scenario_loader import ScenarioLoader
+                                scenario_loader = ScenarioLoader()
+                                scenario_loader.save_scenario(scenario)
+                                logger.info(f"更新剧本中的已收集道具: 添加物品={item}")
+                        elif action == "remove" and item in player.items:
+                            player.items.remove(item)
+                            logger.info(f"玩家失去物品: 玩家={player.name}({player_id}), 物品={item}")
+                            
+                            # 如果有剧本，也更新剧本中的已收集道具
+                            if scenario and item in scenario.collected_items:
+                                scenario.collected_items.remove(item)
+                                from utils.scenario_loader import ScenarioLoader
+                                scenario_loader = ScenarioLoader()
+                                scenario_loader.save_scenario(scenario)
+                                logger.info(f"更新剧本中的已收集道具: 移除物品={item}")
+                        break
+        
+        # 处理剧情进度更新
+        if hasattr(response, 'plot_progress') and response.plot_progress is not None and scenario:
+            if response.plot_progress > scenario.current_plot_point:
+                old_plot_point = scenario.current_plot_point
+                scenario.current_plot_point = min(response.plot_progress, len(scenario.plot_points) - 1)
+                from utils.scenario_loader import ScenarioLoader
+                scenario_loader = ScenarioLoader()
+                scenario_loader.save_scenario(scenario)
+                logger.info(f"更新剧情进度: 从 {old_plot_point + 1} 到 {scenario.current_plot_point + 1}")
+                
+                # 通知所有玩家剧情进展
+                progress_message = f"【剧情进展】\n{scenario.plot_points[scenario.current_plot_point]}"
+                for pid in player_ids:
+                    await self.send_message(pid, progress_message)
+        
         if response.need_dice_roll and response.difficulty:
             # 需要骰子检定，创建掷骰子回合
             narration = response.narration

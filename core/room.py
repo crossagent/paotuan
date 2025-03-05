@@ -14,6 +14,36 @@ class RoomManager:
     def __init__(self, room: Room):
         self.room = room
         
+    def set_scenario(self, scenario_id: str) -> bool:
+        """设置当前游戏使用的剧本
+        
+        Args:
+            scenario_id: 剧本ID
+            
+        Returns:
+            是否设置成功
+        """
+        if not self.get_current_match():
+            logger.warning("当前没有进行中的游戏局，无法设置剧本")
+            return False
+            
+        # 加载剧本
+        from utils.scenario_loader import ScenarioLoader
+        scenario_loader = ScenarioLoader()
+        scenario = scenario_loader.load_scenario(scenario_id)
+        
+        if not scenario:
+            logger.warning(f"剧本不存在: {scenario_id}")
+            return False
+            
+        # 更新当前游戏的场景和剧本ID
+        current_match = self.get_current_match()
+        current_match.scenario_id = scenario_id
+        current_match.scene = scenario.scene
+        
+        logger.info(f"为房间 {self.room.name} 设置剧本: {scenario.name}")
+        return True
+        
     def add_player(self, player_id: str, player_name: str) -> Player:
         """添加玩家到房间"""
         # 检查玩家是否已存在
