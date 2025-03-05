@@ -1,3 +1,4 @@
 dingtalk_stream
 pyyaml
 langchain
+langsmith

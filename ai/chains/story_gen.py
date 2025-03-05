@@ -10,6 +10,7 @@ import os
 import yaml
 import logging
 import random
+from utils.prompt_loader import PromptLoader
 
 # Pydantic 模型定义
 class PlayerInfo(BaseModel):
@@ -59,6 +60,14 @@ class StoryChain:
         base_url = config.get('base_url', 'https://api.openai.com/v1')
         openai_model = config.get('model', 'gpt-3.5-turbo')
         os.environ["OPENAI_API_KEY"] = config.get('openai_api_key', '')
+        
+        # 获取LangSmith配置
+        langsmith_api_key = config.get('langsmith_api_key', '')
+        prompt_name = config.get('prompt_name', 'story_prompt')
+        
+        # 如果提供了LangSmith API密钥，则设置环境变量
+        if langsmith_api_key:
+            os.environ["LANGSMITH_API_KEY"] = langsmith_api_key
 
         # 初始化组件
         self.llm = ChatOpenAI(
@@ -72,20 +81,26 @@ class StoryChain:
         )
         self.output_parser = PydanticOutputParser(pydantic_object=StoryResponse)
 
-        # 构建提示模板
-        self.prompt = ChatPromptTemplate.from_template(
-            template="""你是一个专业的跑团游戏主持人(DM)。
-            
-            当前场景：{current_scene}
-            玩家信息：{players}
-            玩家行动：{player_actions}
-            历史记录：{history}
-
-            根据以上信息推进故事发展。判断是否需要属性检定，会修改到属性或消耗物品的行为一定要进行判定。
-
-            {format_instructions}
-            """
-        )
+        # 尝试从LangSmith拉取提示模板
+        if langsmith_api_key:
+            try:
+                # 初始化PromptLoader
+                prompt_loader = PromptLoader(api_key=langsmith_api_key)
+                
+                # 从LangSmith拉取prompt模板
+                try:
+                    self.prompt = prompt_loader.pull_prompt(prompt_name, include_model=True)
+                    logging.info(f"成功从LangSmith拉取prompt模板: {prompt_name}")
+                except Exception as e:
+                    logging.warning(f"从LangSmith拉取prompt失败: {str(e)}，将使用默认模板")
+                    # 使用默认模板
+                    self.prompt = self._get_default_prompt_template()
+            except Exception as e:
+                logging.warning(f"初始化LangSmith失败: {str(e)}，将使用默认模板")
+                self.prompt = self._get_default_prompt_template()
+        else:
+            logging.info("未设置LangSmith API密钥，将使用默认模板")
+            self.prompt = self._get_default_prompt_template()
 
         # 构建Chain
         self.chain = (
@@ -267,6 +282,26 @@ class StoryChain:
                 return player.name
                 
         return player_id
+        
+    def _get_default_prompt_template(self) -> ChatPromptTemplate:
+        """获取默认的提示模板
+        
+        Returns:
+            ChatPromptTemplate: 默认的提示模板
+        """
+        return ChatPromptTemplate.from_template(
+            template="""你是一个专业的跑团游戏主持人(DM)。
+            
+            当前场景：{current_scene}
+            玩家信息：{players}
+            玩家行动：{player_actions}
+            历史记录：{history}
+
+            根据以上信息推进故事发展。判断是否需要属性检定，会修改到属性或消耗物品的行为一定要进行判定。
+
+            {format_instructions}
+            """
+        )
 
 # 在文件末尾添加以下代码
 def main():
