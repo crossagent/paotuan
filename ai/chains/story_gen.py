@@ -147,6 +147,27 @@ class StoryChain:
                 
         return "\n".join(formatted_history)
 
+    def get_formatted_history(self) -> str:
+        """获取格式化的历史记录
+        
+        Returns:
+            str: 格式化的历史记录字符串，包含玩家行动、系统提示和DM描述
+        """
+        history = self.memory.load_memory_variables({})
+        messages = history.get('history', [])
+        
+        if not isinstance(messages, list):
+            return str(messages)
+            
+        formatted_history = []
+        for msg in messages[-self.history_length:]:
+            # 根据消息类型格式化
+            content = msg.content
+            if isinstance(content, str):
+                formatted_history.append(content)
+                
+        return "\n".join(formatted_history)
+
     def _save_formatted_history(self, context: Dict[str, Any], result: Dict[str, Any]) -> None:
         """保存格式化的历史记录"""
         # 保存玩家行动
@@ -302,15 +323,11 @@ def main():
             ]
 
     try:
-        # 创建故事链实例
         story_chain = StoryChain()
-        
-        # 创建测试数据
         match = TestMatch()
         players = ["p1", "p2", "p3"]
         
-        # 处理一个回合 - 现在是同步调用
-        print("开始处理回合...")
+        # 处理回合
         result = story_chain.process_turn(match, players)
         
         # 打印结果
@@ -329,6 +346,11 @@ def main():
             print(f"{char_id}: {changes}")
         
         print("\n下回合激活玩家:", result.get('active_players', []))
+        
+        # 打印历史记录
+        print("\n=== 历史记录 ===")
+        history = story_chain.get_formatted_history()
+        print(history)
         
     except Exception as e:
         logging.error(f"测试失败: {str(e)}")
