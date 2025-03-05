@@ -15,7 +15,7 @@ class StoryResponse(BaseModel):
     """故事响应模型"""
     narration: str = Field(..., description="故事描述")
     need_dice_roll: bool = Field(..., description="是否需要骰子检定")
-    difficulty: Optional[int] = Field(None, description="检定难度(1-20)")
+    difficulty: Optional[int] = Field(None, description="检定难度(1-10)")
     action_desc: Optional[str] = Field(None, description="行动描述")
     active_players: List[str] = Field(..., description="下一回合激活的玩家ID列表")
 
@@ -54,7 +54,7 @@ class OpenAIService(AIService):
         # 初始化输出解析器
         self.output_parser = PydanticOutputParser(pydantic_object=StoryResponse)
         
-        # 构建提示模板
+            # 构建提示模板
         self.prompt = ChatPromptTemplate.from_template(
             template="""你是一个专业的跑团游戏主持人(DM)。
             
@@ -64,7 +64,14 @@ class OpenAIService(AIService):
             历史记录：{history}
             {dice_results}
 
-            根据以上信息推进故事发展。判断是否需要属性检定，会修改到属性或消耗物品的行为一定要进行判定。
+            根据以上信息推进故事发展。
+
+            【重要】关于判定：
+            1. 判定是一个重要且严肃的事件，不应频繁使用。
+            2. 只有在关键时刻、重大挑战或有显著风险的行动才需要判定。
+            3. 判定失败会导致玩家受到伤害，生命值会减少。
+            4. 会修改到属性或消耗物品的行为一定要进行判定。
+            5. 普通的移动、交谈、观察等低风险行为通常不需要判定。
 
             注意：active_players字段必须使用玩家ID而不是玩家名称。有效的玩家ID列表：{player_ids}
 

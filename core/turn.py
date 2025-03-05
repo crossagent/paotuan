@@ -132,6 +132,22 @@ class TurnManager:
                 "action": action  # 记录玩家实际想做的行动
             }
             
+            # 如果判定失败，减少玩家血量
+            if not success:
+                # 获取玩家对象
+                player = None
+                for p in self.match.players:
+                    if p.id == player_id:
+                        player = p
+                        break
+                
+                if player:
+                    # 根据难度和失败程度计算血量减少值
+                    # 失败时，血量减少值为难度的一半（向上取整）
+                    health_change = -((difficulty + 1) // 2)
+                    rule_engine.apply_health_change(player, health_change)
+                    logger.info(f"玩家 {player_id} 判定失败，生命值变化: {health_change}，当前生命值: {player.health}")
+            
             logger.info(f"玩家 {player_id} 尝试: {action}, 掷骰子结果: {roll}, 难度: {difficulty}, {'成功' if success else '失败'}")
         else:
             logger.warning(f"不支持的玩家回合类型: {type(current_turn)}")
