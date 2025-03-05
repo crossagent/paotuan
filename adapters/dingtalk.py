@@ -4,6 +4,7 @@ import os
 from typing import Optional, Dict, Any, List, Callable
 
 from dingtalk_stream import DingTalkStreamClient, Credential, ChatbotMessage, AckMessage
+from dingtalk_stream.frames import Headers
 from dingtalk_stream.chatbot import ChatbotHandler
 from adapters.base import MessageAdapter, GameEvent, PlayerJoinedEvent, PlayerActionEvent, PlayerRequestStartEvent
 from adapters.command_handler import CommandHandler
@@ -37,26 +38,25 @@ class DingTalkHandler(ChatbotHandler):
             "显示帮助信息"
         )
         
-    async def raw_process(self, callback: Any) -> AckMessage:
-        """处理原始回调消息"""
-        try:
-            message = ChatbotMessage.from_dict(callback.data)
-            await self.process(message)
-            ack_message = AckMessage()
-            ack_message.code = AckMessage.STATUS_OK
-            return ack_message
-        except Exception as e:
-            logger.exception(f"处理钉钉消息失败: {str(e)}")
-            ack_message = AckMessage()
-            ack_message.code = AckMessage.STATUS_OK
-            return ack_message # 即使处理失败也返回OK，避免重试
+    # 删除自定义的raw_process方法，使用父类的实现
     
-    async def process(self, message: ChatbotMessage) -> None:
+    async def process(self, message):
         """处理钉钉消息"""
         try:
+            # 检查消息类型，如果是CallbackMessage，则转换为ChatbotMessage
+            if hasattr(message, 'data') and not hasattr(message, 'text'):
+                # 这是一个CallbackMessage，需要从data中提取信息并创建ChatbotMessage
+                from dingtalk_stream.chatbot import ChatbotMessage
+                chatbot_message = ChatbotMessage.from_dict(message.data)
+                message = chatbot_message
+            
+            # 现在message应该是ChatbotMessage类型
             text = message.text.content.strip()
             player_id = message.sender_staff_id
             player_name = message.sender_nick
+            message_id = message.message_id
+            
+            logger.info(f"收到钉钉消息: ID={message_id}, 玩家={player_name}({player_id}), 内容='{text}'")
             
             # 保存消息以便回复
             self.reply_map[player_id] = message
@@ -67,6 +67,7 @@ class DingTalkHandler(ChatbotHandler):
             
             if text.startswith('/'):
                 # 使用命令处理器处理命令
+                logger.info(f"处理命令: {text}, 玩家={player_name}({player_id})")
                 event, response = self.cmd_handler.process(text, player_id, player_name)
                 
                 # 特殊处理帮助命令
@@ -75,17 +76,24 @@ class DingTalkHandler(ChatbotHandler):
                 
                 # 如果有需要回复的消息
                 if response:
+                    logger.info(f"命令处理响应: {response}")
                     self.reply_text(response, message)
             else:
                 # 普通消息视为玩家行动
+                logger.info(f"创建玩家行动事件: 玩家={player_name}({player_id}), 行动='{text}'")
                 event = PlayerActionEvent(player_id, text)
             
             # 调用回调处理事件
             if event:
+                logger.info(f"发送事件到游戏服务器: 类型={event.event_type}, 数据={event.data}")
                 await self.callback_func(event)
                 
+            # 返回成功状态码和消息
+            return AckMessage.STATUS_OK, "success"
         except Exception as e:
             logger.exception(f"处理钉钉消息失败: {str(e)}")
+            # 即使处理失败也返回OK状态码，避免重试
+            return AckMessage.STATUS_OK, f"处理异常但返回成功: {str(e)}"
 
 class DingTalkAdapter(MessageAdapter):
     """钉钉适配器"""

@@ -33,8 +33,13 @@ class RoomManager:
         # 检查是否有进行中的游戏局
         if self.room.current_match_id:
             current_match = self.get_current_match()
-            if current_match and current_match.status == GameStatus.RUNNING:
-                raise ValueError("当前已有进行中的游戏局")
+            if current_match:
+                logger.info(f"检查当前游戏局: ID={current_match.id}, 状态={current_match.status}")
+                if current_match.status == GameStatus.RUNNING:
+                    logger.warning(f"无法创建新游戏局: 当前已有进行中的游戏局 ID={current_match.id}")
+                    raise ValueError("当前已有进行中的游戏局")
+                else:
+                    logger.info(f"当前游戏局非运行状态，可以创建新游戏局")
                 
         # 创建新游戏局
         match_id = str(uuid.uuid4())

@@ -66,10 +66,15 @@ class TurnManager:
         
         # 设置下一回合信息
         if next_turn_type:
-            # 直接设置NextTurnInfo对象
+            # 根据下一回合类型决定激活玩家
+            active_players = []
+            if next_turn_type == TurnType.PLAYER:
+                active_players = next_active_players or []
+            
+            # 设置NextTurnInfo对象
             current_turn.next_turn_info = NextTurnInfo(
                 turn_type=next_turn_type,
-                active_players=next_active_players or []
+                active_players=active_players
             )
             
         logger.info(f"完成回合: {current_turn.id}")

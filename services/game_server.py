@@ -44,6 +44,8 @@ class GameServer:
         player_id = event.data["player_id"]
         player_name = event.data["player_name"]
         
+        logger.info(f"处理玩家加入事件: 玩家={player_name}({player_id})")
+        
         # 获取房间
         room = self._get_or_create_room()
         room_manager = RoomManager(room)
@@ -52,6 +54,7 @@ class GameServer:
         player = room_manager.add_player(player_id, player_name)
         
         # 发送消息给玩家
+        logger.info(f"发送加入成功消息给玩家: {player_name}({player_id}), 房间={room.name}")
         await self.send_message(player_id, f"你已成功加入房间: {room.name}")
         
         return []
@@ -117,34 +120,52 @@ class GameServer:
         player_id = event.data["player_id"]
         player_name = event.data["player_name"]
         
+        logger.info(f"处理开始游戏事件: 发起者={player_name}({player_id})")
+        
         # 获取房间
         room = self._get_or_create_room()
         room_manager = RoomManager(room)
         
         # 检查房间中是否有玩家
         if not room.players:
+            logger.warning(f"开始游戏失败: 房间中没有玩家")
             await self.send_message(player_id, "房间中没有玩家，无法开始游戏")
             return []
         
         # 创建新的游戏局
         try:
+            # 检查当前是否有进行中的游戏局
+            current_match = room_manager.get_current_match()
+            if current_match:
+                logger.info(f"当前游戏局状态: ID={current_match.id}, 状态={current_match.status}")
+                if current_match.status == GameStatus.RUNNING:
+                    logger.warning(f"无法开始新游戏: 当前已有进行中的游戏局 ID={current_match.id}")
+                    await self.send_message(player_id, f"无法开始游戏: 当前已有进行中的游戏局")
+                    return []
+            
             match = room_manager.create_match("新的冒险")
             match.status = GameStatus.RUNNING
+            
+            logger.info(f"创建新游戏局成功: ID={match.id}, 状态={match.status}")
             
             # 获取回合管理器
             turn_manager = TurnManager(match)
             
             # 创建第一个DM回合
             dm_turn = turn_manager.start_new_turn(TurnType.DM)
+            logger.info(f"创建第一个DM回合: ID={dm_turn.id}")
             
             # 通知所有玩家游戏开始
             player_ids = [p.id for p in room.players]
             for pid in player_ids:
+                logger.info(f"通知玩家游戏开始: 玩家ID={pid}")
                 await self.send_message(pid, f"游戏已开始！DM {player_name} 正在准备第一个场景...")
             
             # 触发DM叙述事件
+            logger.info("触发DM叙述事件")
             return [DMNarrationEvent("")]
         except ValueError as e:
+            logger.error(f"创建游戏局失败: {str(e)}")
             await self.send_message(player_id, f"无法开始游戏: {str(e)}")
             return []
     
@@ -318,17 +339,21 @@ class GameServer:
     async def _process_event(self, event: GameEvent) -> None:
         """处理事件"""
         try:
+            logger.info(f"处理事件: 类型={event.event_type}, 数据={event.data}")
+            
             # 发布到事件总线 - 使用await等待异步结果
             responses = await self.event_bus.publish(event)
             
             # 处理响应
             for response in responses:
                 if isinstance(response, GameEvent):
+                    logger.info(f"处理响应事件: 类型={response.event_type}")
                     await self._process_event(response)
         except Exception as e:
             logger.exception(f"处理事件失败: {str(e)}")
 
     async def send_message(self, player_id: str, content: str) -> None:
         """发送消息给玩家"""
+        logger.info(f"发送消息给玩家: ID={player_id}, 内容前20字符='{content[:20]}...'")
         for adapter in self.adapters:
             await adapter.send_message(player_id, content)
