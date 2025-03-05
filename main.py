@@ -8,19 +8,23 @@ import logging
 import yaml
 from typing import Dict, Any
 
-# 确保项目根目录在sys.path中
-project_root = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(project_root)
-
 from services.game_server import GameServer
 from services.ai_service import OpenAIService
 from adapters.dingtalk import DingTalkAdapter
 from utils.logging import setup_logger
 
+# 确保项目根目录在sys.path中
+project_root = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(project_root)
+
 def load_config(config_path: str) -> Dict[str, Any]:
     """加载配置文件"""
-    with open(config_path, 'r', encoding='utf-8') as f:
-        return yaml.safe_load(f)
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            return yaml.safe_load(f)
+    except FileNotFoundError:
+        logging.warning(f"配置文件 {config_path} 未找到，将使用环境变量或默认值")
+        return {}
 
 async def main():
     # 解析命令行参数
@@ -48,6 +52,16 @@ async def main():
             config.get('client_id', ''),
             config.get('client_secret', '')
         )
+        
+        # 输出服务器信息
+        logger.info("服务器配置信息:")
+        logger.info(f"- 配置文件: {args.config}")
+        logger.info(f"- 日志级别: {args.log_level}")
+        logger.info("- 环境变量支持:")
+        logger.info(f"  - OPENAI_API_KEY: {'已设置' if os.environ.get('OPENAI_API_KEY') else '未设置'}")
+        logger.info(f"  - OPENAI_MODEL: {os.environ.get('OPENAI_MODEL', '未设置')}")
+        logger.info(f"  - DINGTALK_CLIENT_ID: {'已设置' if os.environ.get('DINGTALK_CLIENT_ID') else '未设置'}")
+        logger.info(f"  - DINGTALK_CLIENT_SECRET: {'已设置' if os.environ.get('DINGTALK_CLIENT_SECRET') else '未设置'}")
         
         # 注册适配器
         server.register_adapter(dingtalk_adapter)

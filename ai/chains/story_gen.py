@@ -5,7 +5,7 @@ from langchain_core.output_parsers import PydanticOutputParser
 from langchain.memory import ConversationBufferMemory
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
-from game.state.models import Match, TurnType
+from models.entities import Match, TurnType
 import os
 import yaml
 import logging

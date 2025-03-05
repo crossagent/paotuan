@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from typing import Optional, Dict, Any, List, Callable
 
 from dingtalk_stream import DingTalkStreamClient, Credential, ChatbotMessage, AckMessage
@@ -58,9 +59,10 @@ class DingTalkHandler:
 class DingTalkAdapter(MessageAdapter):
     """钉钉适配器"""
     
-    def __init__(self, client_id: str, client_secret: str):
-        self.client_id = client_id
-        self.client_secret = client_secret
+    def __init__(self, client_id: str = "", client_secret: str = ""):
+        # 优先使用环境变量
+        self.client_id = os.environ.get('DINGTALK_CLIENT_ID', '') or client_id
+        self.client_secret = os.environ.get('DINGTALK_CLIENT_SECRET', '') or client_secret
         self.client = None
         self.handler = None
         self.event_queue = asyncio.Queue()

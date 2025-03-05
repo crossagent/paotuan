@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Any
 import logging
 import yaml
+import os
 
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
@@ -30,15 +31,24 @@ class OpenAIService(AIService):
     """使用OpenAI实现的AI服务"""
     
     def __init__(self, config_path: str = "config/llm_settings.yaml"):
-        # 加载配置
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = yaml.safe_load(f)
+        # 尝试从环境变量加载API密钥
+        api_key = os.environ.get('OPENAI_API_KEY', '')
+        model = os.environ.get('OPENAI_MODEL', '')
+        temperature = os.environ.get('OPENAI_TEMP', '')
+        
+        # 尝试加载配置文件
+        config = {}
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f)
+        except FileNotFoundError:
+            logging.warning(f"配置文件 {config_path} 未找到，将使用环境变量或默认值")
             
-        # 初始化LLM
+        # 环境变量优先级高于配置文件
         self.llm = ChatOpenAI(
-            api_key=config.get('openai_api_key', ''),
-            model=config.get('model', 'gpt-3.5-turbo'),
-            temperature=config.get('temperature', 0.7)
+            api_key=api_key or config.get('openai_api_key', ''),
+            model=model or config.get('model', 'gpt-3.5-turbo'),
+            temperature=float(temperature) if temperature else config.get('temperature', 0.7)
         )
         
         # 初始化输出解析器
