@@ -35,7 +35,7 @@ class DingTalkHandler(ChatbotHandler):
         self.cmd_handler.register(
             "/剧本", ["/scenario"], 
             lambda pid, pname, args: SetScenarioEvent(pid, args.strip()),
-            "设置剧本，用法: /剧本 [剧本ID]"
+            "设置剧本（必须在游戏开始前），用法: /剧本 [剧本ID]"
         )
         # 注册帮助命令
         self.cmd_handler.register(

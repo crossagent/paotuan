@@ -69,6 +69,7 @@ class GameServer:
         room = self._get_or_create_room()
         room_manager = RoomManager(room)
         
+        # 检查是否有进行中的游戏局
         match = room_manager.get_current_match()
         if not match:
             await self.send_message(player_id, "当前没有进行中的游戏局")
@@ -78,43 +79,47 @@ class GameServer:
         turn_manager = TurnManager(match)
         current_turn = turn_manager.get_current_turn()
         
+        # 检查是否有活动回合
         if not current_turn:
             await self.send_message(player_id, "当前没有活动回合")
             return []
             
+        # 检查是否是玩家回合
+        if current_turn.turn_type != TurnType.PLAYER:
+            return []
+            
         # 处理玩家行动
-        if current_turn.turn_type == TurnType.PLAYER:
-            success = turn_manager.handle_player_action(player_id, action)
-            if not success:
-                await self.send_message(player_id, "无法处理你的行动")
-                return []
-                
-            # 检查回合是否完成
-            if current_turn.status == TurnStatus.COMPLETED:
-                # 如果是掷骰子回合，处理掷骰子结果
-                if isinstance(current_turn, DiceTurn):
-                    # 处理掷骰子结果
-                    dice_results = self.rule_engine.process_dice_turn_results(current_turn)
-                    
-                    # 通知所有玩家掷骰子结果
-                    result_message = "【掷骰子结果】\n"
-                    for result in dice_results.get("summary", []):
-                        player_name = next((p.name for p in room.players if p.id == result["player_id"]), result["player_id"])
-                        result_message += f"{player_name} 尝试 {result['action']}，掷出了 {result['roll']}，难度 {result['difficulty']}，{'成功' if result['success'] else '失败'}\n"
-                    
-                    for pid in [p.id for p in room.players]:
-                        await self.send_message(pid, result_message)
-                
-                # 转到DM回合
-                turn_manager.complete_current_turn(TurnType.DM)
-                
-                # 创建DM回合
-                dm_turn = turn_manager.start_new_turn(TurnType.DM)
-                
-                # 触发DM叙述
-                return [DMNarrationEvent("")]
+        success = turn_manager.handle_player_action(player_id, action)
+        if not success:
+            await self.send_message(player_id, "无法处理你的行动")
+            return []
+            
+        # 检查回合是否完成
+        if current_turn.status != TurnStatus.COMPLETED:
+            return []
+            
+        # 如果是掷骰子回合，处理掷骰子结果
+        if isinstance(current_turn, DiceTurn):
+            # 处理掷骰子结果
+            dice_results = self.rule_engine.process_dice_turn_results(current_turn)
+            
+            # 通知所有玩家掷骰子结果
+            result_message = "【掷骰子结果】\n"
+            for result in dice_results.get("summary", []):
+                player_name = next((p.name for p in room.players if p.id == result["player_id"]), result["player_id"])
+                result_message += f"{player_name} 尝试 {result['action']}，掷出了 {result['roll']}，难度 {result['difficulty']}，{'成功' if result['success'] else '失败'}\n"
+            
+            for pid in [p.id for p in room.players]:
+                await self.send_message(pid, result_message)
         
-        return []
+        # 转到DM回合
+        turn_manager.complete_current_turn(TurnType.DM)
+        
+        # 创建DM回合
+        dm_turn = turn_manager.start_new_turn(TurnType.DM)
+        
+        # 触发DM叙述
+        return [DMNarrationEvent("")]
     
     async def _handle_start_game(self, event: GameEvent) -> List[GameEvent]:
         """处理DM开启游戏事件"""
@@ -127,30 +132,40 @@ class GameServer:
         room = self._get_or_create_room()
         room_manager = RoomManager(room)
         
-        # 检查房间中是否有玩家
+        # 1. 检查房间中是否有玩家
         if not room.players:
             logger.warning(f"开始游戏失败: 房间中没有玩家")
             await self.send_message(player_id, "房间中没有玩家，无法开始游戏")
             return []
         
-        # 创建新的游戏局
         try:
-            # 检查当前是否有进行中的游戏局
+            # 2. 获取或创建游戏局
             current_match = room_manager.get_current_match()
-            if current_match:
-                logger.info(f"当前游戏局状态: ID={current_match.id}, 状态={current_match.status}")
-                if current_match.status == GameStatus.RUNNING:
-                    logger.warning(f"无法开始新游戏: 当前已有进行中的游戏局 ID={current_match.id}")
-                    await self.send_message(player_id, f"无法开始游戏: 当前已有进行中的游戏局")
-                    return []
             
-            match = room_manager.create_match("新的冒险")
-            match.status = GameStatus.RUNNING
+            # 3. 如果没有游戏局，创建一个新的并提示设置剧本
+            if not current_match:
+                current_match = room_manager.create_match("新的冒险")
+                await self._send_scenario_list(player_id, "已创建游戏局，请先设置剧本再开始游戏！")
+                return []
             
-            logger.info(f"创建新游戏局成功: ID={match.id}, 状态={match.status}")
+            # 4. 检查游戏是否已经在运行
+            if current_match.status == GameStatus.RUNNING:
+                logger.warning(f"无法开始新游戏: 当前已有进行中的游戏局 ID={current_match.id}")
+                await self.send_message(player_id, f"无法开始游戏: 当前已有进行中的游戏局")
+                return []
+            
+            # 5. 检查是否已设置剧本
+            if not current_match.scenario_id:
+                await self._send_scenario_list(player_id, "请先设置剧本再开始游戏！")
+                return []
+            
+            # 6. 所有条件都满足，可以开始游戏
+            # 设置游戏状态为运行中
+            current_match.status = GameStatus.RUNNING
+            logger.info(f"游戏局开始运行: ID={current_match.id}, 状态={current_match.status}")
             
             # 获取回合管理器
-            turn_manager = TurnManager(match)
+            turn_manager = TurnManager(current_match)
             
             # 创建第一个DM回合
             dm_turn = turn_manager.start_new_turn(TurnType.DM)
@@ -165,10 +180,28 @@ class GameServer:
             # 触发DM叙述事件
             logger.info("触发DM叙述事件")
             return [DMNarrationEvent("")]
+            
         except ValueError as e:
             logger.error(f"创建游戏局失败: {str(e)}")
             await self.send_message(player_id, f"无法开始游戏: {str(e)}")
             return []
+    
+    async def _send_scenario_list(self, player_id: str, message: str) -> None:
+        """发送剧本列表给玩家"""
+        from utils.scenario_loader import ScenarioLoader
+        scenario_loader = ScenarioLoader()
+        scenarios = scenario_loader.list_scenarios()
+        
+        # 构建剧本列表消息
+        scenarios_msg = "可用剧本列表:\n"
+        for s in scenarios:
+            scenarios_msg += f"- {s['id']}: {s['name']}\n"
+        
+        # 发送提示消息
+        await self.send_message(
+            player_id, 
+            f"{message}\n\n{scenarios_msg}\n使用命令 /剧本 [剧本ID] 设置剧本。"
+        )
     
     async def _handle_set_scenario(self, event: SetScenarioEvent) -> List[GameEvent]:
         """处理设置剧本事件"""
@@ -179,6 +212,18 @@ class GameServer:
         
         # 获取房间
         room = self._get_or_create_room()
+        room_manager = RoomManager(room)
+        
+        # 检查是否有游戏局，如果没有则创建
+        current_match = room_manager.get_current_match()
+        if not current_match:
+            current_match = room_manager.create_match("新的冒险")
+            logger.info(f"为设置剧本创建新游戏局: ID={current_match.id}")
+        
+        # 检查游戏状态，如果已经开始则不能更换剧本
+        if current_match.status == GameStatus.RUNNING:
+            await self.send_message(player_id, "无法更换剧本：游戏已经开始。剧本只能在游戏开始前设置。")
+            return []
         
         # 检查剧本是否存在
         from utils.scenario_loader import ScenarioLoader
@@ -186,27 +231,39 @@ class GameServer:
         scenario = scenario_loader.load_scenario(scenario_id)
         
         if not scenario:
-            await self.send_message(player_id, f"剧本不存在: {scenario_id}")
+            # 获取可用剧本列表并发送
+            scenarios = scenario_loader.list_scenarios()
+            scenarios_msg = "可用剧本列表:\n"
+            for s in scenarios:
+                scenarios_msg += f"- {s['id']}: {s['name']}\n"
+                
+            await self.send_message(player_id, f"剧本不存在: {scenario_id}\n\n{scenarios_msg}")
             return []
             
         # 设置剧本
-        room_manager = RoomManager(room)
         success = room_manager.set_scenario(scenario_id)
+        if not success:
+            await self.send_message(player_id, "设置剧本失败。剧本只能在游戏开始前设置。")
+            return []
+            
+        # 构建剧本详情消息
+        scenario_details = f"【剧本详情】\n"
+        scenario_details += f"名称: {scenario.name}\n"
+        scenario_details += f"背景: {scenario.background[:100]}...\n"
+        scenario_details += f"目标: {scenario.goal}\n"
         
-        if success:
-            # 通知所有玩家
-            for p in room.players:
-                await self.send_message(p.id, f"DM设置了新剧本: {scenario.name}")
-                
-            # 如果当前是DM回合，触发DM叙述事件以更新场景
-            current_match = room_manager.get_current_match()
-            if current_match:
-                turn_manager = TurnManager(current_match)
-                current_turn = turn_manager.get_current_turn()
-                if current_turn and current_turn.turn_type == TurnType.DM:
-                    return [DMNarrationEvent("")]
-        else:
-            await self.send_message(player_id, "设置剧本失败，请确保游戏已经开始")
+        # 通知所有玩家
+        for p in room.players:
+            await self.send_message(p.id, f"DM设置了新剧本: {scenario.name}")
+            
+        # 给DM发送详细信息
+        await self.send_message(player_id, scenario_details)
+        
+        # 如果当前是DM回合，触发DM叙述事件以更新场景
+        turn_manager = TurnManager(current_match)
+        current_turn = turn_manager.get_current_turn()
+        if current_turn and current_turn.turn_type == TurnType.DM:
+            return [DMNarrationEvent("")]
             
         return []
     
@@ -216,6 +273,7 @@ class GameServer:
         room = self._get_or_create_room()
         room_manager = RoomManager(room)
         
+        # 检查是否有进行中的游戏局
         match = room_manager.get_current_match()
         if not match:
             logger.warning("当前没有进行中的游戏局")
@@ -225,6 +283,7 @@ class GameServer:
         turn_manager = TurnManager(match)
         current_turn = turn_manager.get_current_turn()
         
+        # 检查是否是DM回合
         if not current_turn or current_turn.turn_type != TurnType.DM:
             logger.warning("当前不是DM回合")
             return []
@@ -233,27 +292,47 @@ class GameServer:
         player_names = [p.name for p in room.players]
         player_ids = [p.id for p in room.players]
         
-        # 获取上一个回合的玩家行动
+        # 获取上下文信息
+        context = self._prepare_narration_context(match, current_turn, room.players, player_names, player_ids)
+        
+        # 加载剧本（如果有）
+        scenario = self._load_scenario(match)
+        
+        # 调用AI服务
+        response = await self.ai_service.generate_narration(context, scenario)
+        
+        # 处理AI响应
+        await self._process_location_updates(response, room.players, scenario)
+        await self._process_item_updates(response, room.players, scenario)
+        await self._process_plot_progress(response, scenario, player_ids)
+        
+        # 处理回合转换和通知玩家
+        await self._handle_turn_transition(response, current_turn, turn_manager, player_ids)
+        
+        return []
+        
+    def _prepare_narration_context(self, match, current_turn, players, player_names, player_ids):
+        """准备AI叙述的上下文信息"""
         previous_actions = ""
         dice_results = None
         
+        # 获取上一个回合的玩家行动
         if len(match.turns) > 1:
             prev_turn = [t for t in match.turns if t.id != current_turn.id][-1]
             if prev_turn.turn_type == TurnType.PLAYER:
                 if isinstance(prev_turn, DiceTurn):
                     # 如果上一回合是掷骰子回合，获取掷骰子结果
                     dice_results = self.rule_engine.process_dice_turn_results(prev_turn)
-                    # 不需要设置previous_actions，因为掷骰子回合的行动已经包含在dice_results中
                 elif isinstance(prev_turn, ActionTurn):
                     # 普通行动回合，获取玩家行动
                     actions = []
                     for pid, action in prev_turn.actions.items():
-                        player_name = next((p.name for p in room.players if p.id == pid), pid)
+                        player_name = next((p.name for p in players if p.id == pid), pid)
                         actions.append(f"{player_name}: {action}")
                     previous_actions = "\n".join(actions)
         
         # 准备生成上下文
-        context = {
+        return {
             "current_scene": match.scene,
             "players": ", ".join(player_names),
             "player_actions": previous_actions or "没有玩家行动",
@@ -262,108 +341,120 @@ class GameServer:
             "player_ids": player_ids  # 添加玩家ID列表
         }
         
-        # 加载剧本（如果有）
-        scenario = None
-        if match.scenario_id:
-            from utils.scenario_loader import ScenarioLoader
-            scenario_loader = ScenarioLoader()
-            scenario = scenario_loader.load_scenario(match.scenario_id)
-            if scenario:
-                logger.info(f"加载剧本: {scenario.name}, 当前剧情节点: {scenario.current_plot_point + 1}/{len(scenario.plot_points)}")
+    def _load_scenario(self, match):
+        """加载剧本（如果有）"""
+        if not match.scenario_id:
+            return None
+            
+        from utils.scenario_loader import ScenarioLoader
+        scenario_loader = ScenarioLoader()
+        scenario = scenario_loader.load_scenario(match.scenario_id)
         
-        # 调用AI服务
-        response = await self.ai_service.generate_narration(context, scenario)
+        if scenario:
+            logger.info(f"加载剧本: {scenario.name}, 当前剧情节点: {scenario.current_plot_point + 1}/{len(scenario.plot_points)}")
+            
+        return scenario
         
-        # 处理AI响应
-        # 处理位置更新
-        if hasattr(response, 'location_updates') and response.location_updates:
-            for location_update in response.location_updates:
-                player_id = location_update.player_id
-                new_location = location_update.new_location
-                
-                # 更新玩家位置
-                for player in room.players:
-                    if player.id == player_id:
-                        player.location = new_location
-                        logger.info(f"更新玩家位置: 玩家={player.name}({player_id}), 新位置={new_location}")
+    async def _process_location_updates(self, response, players, scenario):
+        """处理位置更新"""
+        if not hasattr(response, 'location_updates') or not response.location_updates:
+            return
+            
+        for location_update in response.location_updates:
+            player_id = location_update.player_id
+            new_location = location_update.new_location
+            
+            # 更新玩家位置
+            for player in players:
+                if player.id == player_id:
+                    player.location = new_location
+                    logger.info(f"更新玩家位置: 玩家={player.name}({player_id}), 新位置={new_location}")
+                    
+                    # 如果有剧本，也更新剧本中的玩家位置
+                    if scenario:
+                        scenario.player_location = new_location
+                        from utils.scenario_loader import ScenarioLoader
+                        scenario_loader = ScenarioLoader()
+                        scenario_loader.save_scenario(scenario)
+                        logger.info(f"更新剧本中的玩家位置: 新位置={new_location}")
+                    break
+                    
+    async def _process_item_updates(self, response, players, scenario):
+        """处理物品更新"""
+        if not hasattr(response, 'item_updates') or not response.item_updates:
+            return
+            
+        for item_update in response.item_updates:
+            player_id = item_update.player_id
+            item = item_update.item
+            action = item_update.action
+            
+            # 更新玩家物品
+            for player in players:
+                if player.id == player_id:
+                    if action == "add" and item not in player.items:
+                        player.items.append(item)
+                        logger.info(f"玩家获得物品: 玩家={player.name}({player_id}), 物品={item}")
                         
-                        # 如果有剧本，也更新剧本中的玩家位置
-                        if scenario:
-                            scenario.player_location = new_location
+                        # 如果有剧本，也更新剧本中的已收集道具
+                        if scenario and item not in scenario.collected_items:
+                            scenario.collected_items.append(item)
                             from utils.scenario_loader import ScenarioLoader
                             scenario_loader = ScenarioLoader()
                             scenario_loader.save_scenario(scenario)
-                            logger.info(f"更新剧本中的玩家位置: 新位置={new_location}")
-                        break
-        
-        # 处理物品更新
-        if hasattr(response, 'item_updates') and response.item_updates:
-            for item_update in response.item_updates:
-                player_id = item_update.player_id
-                item = item_update.item
-                action = item_update.action
+                            logger.info(f"更新剧本中的已收集道具: 添加物品={item}")
+                    elif action == "remove" and item in player.items:
+                        player.items.remove(item)
+                        logger.info(f"玩家失去物品: 玩家={player.name}({player_id}), 物品={item}")
+                        
+                        # 如果有剧本，也更新剧本中的已收集道具
+                        if scenario and item in scenario.collected_items:
+                            scenario.collected_items.remove(item)
+                            from utils.scenario_loader import ScenarioLoader
+                            scenario_loader = ScenarioLoader()
+                            scenario_loader.save_scenario(scenario)
+                            logger.info(f"更新剧本中的已收集道具: 移除物品={item}")
+                    break
+                    
+    async def _process_plot_progress(self, response, scenario, player_ids):
+        """处理剧情进度更新"""
+        if not hasattr(response, 'plot_progress') or response.plot_progress is None or not scenario:
+            return
+            
+        if response.plot_progress > scenario.current_plot_point:
+            old_plot_point = scenario.current_plot_point
+            scenario.current_plot_point = min(response.plot_progress, len(scenario.plot_points) - 1)
+            from utils.scenario_loader import ScenarioLoader
+            scenario_loader = ScenarioLoader()
+            scenario_loader.save_scenario(scenario)
+            logger.info(f"更新剧情进度: 从 {old_plot_point + 1} 到 {scenario.current_plot_point + 1}")
+            
+            # 通知所有玩家剧情进展
+            progress_message = f"【剧情进展】\n{scenario.plot_points[scenario.current_plot_point]}"
+            for pid in player_ids:
+                await self.send_message(pid, progress_message)
                 
-                # 更新玩家物品
-                for player in room.players:
-                    if player.id == player_id:
-                        if action == "add" and item not in player.items:
-                            player.items.append(item)
-                            logger.info(f"玩家获得物品: 玩家={player.name}({player_id}), 物品={item}")
-                            
-                            # 如果有剧本，也更新剧本中的已收集道具
-                            if scenario and item not in scenario.collected_items:
-                                scenario.collected_items.append(item)
-                                from utils.scenario_loader import ScenarioLoader
-                                scenario_loader = ScenarioLoader()
-                                scenario_loader.save_scenario(scenario)
-                                logger.info(f"更新剧本中的已收集道具: 添加物品={item}")
-                        elif action == "remove" and item in player.items:
-                            player.items.remove(item)
-                            logger.info(f"玩家失去物品: 玩家={player.name}({player_id}), 物品={item}")
-                            
-                            # 如果有剧本，也更新剧本中的已收集道具
-                            if scenario and item in scenario.collected_items:
-                                scenario.collected_items.remove(item)
-                                from utils.scenario_loader import ScenarioLoader
-                                scenario_loader = ScenarioLoader()
-                                scenario_loader.save_scenario(scenario)
-                                logger.info(f"更新剧本中的已收集道具: 移除物品={item}")
-                        break
+    async def _handle_turn_transition(self, response, current_turn, turn_manager, player_ids):
+        """处理回合转换和通知玩家"""
+        narration = response.narration
         
-        # 处理剧情进度更新
-        if hasattr(response, 'plot_progress') and response.plot_progress is not None and scenario:
-            if response.plot_progress > scenario.current_plot_point:
-                old_plot_point = scenario.current_plot_point
-                scenario.current_plot_point = min(response.plot_progress, len(scenario.plot_points) - 1)
-                from utils.scenario_loader import ScenarioLoader
-                scenario_loader = ScenarioLoader()
-                scenario_loader.save_scenario(scenario)
-                logger.info(f"更新剧情进度: 从 {old_plot_point + 1} 到 {scenario.current_plot_point + 1}")
-                
-                # 通知所有玩家剧情进展
-                progress_message = f"【剧情进展】\n{scenario.plot_points[scenario.current_plot_point]}"
-                for pid in player_ids:
-                    await self.send_message(pid, progress_message)
+        # 保存DM叙述到DMTurn对象
+        if isinstance(current_turn, DMTurn):
+            current_turn.narration = narration
         
+        # 完成DM回合，准备下一个玩家回合
+        turn_manager.complete_current_turn(TurnType.PLAYER, response.active_players)
+        
+        # 根据是否需要骰子检定创建不同类型的回合
         if response.need_dice_roll and response.difficulty:
-            # 需要骰子检定，创建掷骰子回合
-            narration = response.narration
-            
-            # 保存DM叙述到DMTurn对象
-            if isinstance(current_turn, DMTurn):
-                current_turn.narration = narration
-            
-            # 完成DM回合，准备下一个玩家回合
-            turn_manager.complete_current_turn(TurnType.PLAYER, response.active_players)
-            
-            # 创建新的掷骰子回合，传入action_desc
+            # 创建新的掷骰子回合
             action_desc = response.action_desc or "行动"
-            player_turn = turn_manager.start_new_turn(
+            turn_manager.start_new_turn(
                 TurnType.PLAYER, 
                 response.active_players,
                 turn_mode="dice",
                 difficulty=response.difficulty,
-                action_desc=action_desc  # 传入action_desc
+                action_desc=action_desc
             )
             
             # 通知所有玩家
@@ -374,18 +465,8 @@ class GameServer:
             for player_id in response.active_players:
                 await self.send_message(player_id, f"需要进行 {action_desc} 的骰子检定，难度为 {response.difficulty}。请描述你的具体行动。")
         else:
-            # 普通回合，不需要骰子检定
-            narration = response.narration
-            
-            # 保存DM叙述到DMTurn对象
-            if isinstance(current_turn, DMTurn):
-                current_turn.narration = narration
-            
-            # 完成DM回合，准备下一个玩家回合
-            turn_manager.complete_current_turn(TurnType.PLAYER, response.active_players)
-            
             # 创建新的普通玩家回合
-            player_turn = turn_manager.start_new_turn(
+            turn_manager.start_new_turn(
                 TurnType.PLAYER, 
                 response.active_players,
                 turn_mode="action"
@@ -398,8 +479,6 @@ class GameServer:
             # 通知激活玩家
             for player_id in response.active_players:
                 await self.send_message(player_id, "轮到你行动了，请输入你的行动。")
-        
-        return []
 
     def _get_or_create_room(self) -> Room:
         """获取或创建房间"""
@@ -414,6 +493,7 @@ class GameServer:
 
     async def start(self) -> None:
         """启动服务器"""
+        # 检查服务器是否已经在运行
         if self.running:
             logger.warning("服务器已经在运行")
             return
@@ -435,6 +515,10 @@ class GameServer:
 
     async def stop(self) -> None:
         """停止服务器"""
+        # 如果服务器已经停止，直接返回
+        if not self.running:
+            return
+            
         self.running = False
         
         # 停止所有适配器

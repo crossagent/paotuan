@@ -23,8 +23,15 @@ class RoomManager:
         Returns:
             是否设置成功
         """
-        if not self.get_current_match():
-            logger.warning("当前没有进行中的游戏局，无法设置剧本")
+        # 获取当前游戏局
+        current_match = self.get_current_match()
+        if not current_match:
+            logger.warning("当前没有游戏局，无法设置剧本")
+            return False
+            
+        # 检查游戏状态，只允许在游戏开始前（WAITING状态）设置剧本
+        if current_match.status != GameStatus.WAITING:
+            logger.warning(f"无法设置剧本: 游戏已经开始，状态为 {current_match.status}")
             return False
             
         # 加载剧本
@@ -37,7 +44,6 @@ class RoomManager:
             return False
             
         # 更新当前游戏的场景和剧本ID
-        current_match = self.get_current_match()
         current_match.scenario_id = scenario_id
         current_match.scene = scenario.scene
         
