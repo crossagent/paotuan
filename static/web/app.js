@@ -65,6 +65,22 @@ const app = Vue.createApp({
         };
     },
     
+    computed: {
+        // 判断当前用户是否是房主
+        isCurrentUserHost() {
+            if (!this.currentRoom || !this.user.id) return false;
+            return this.currentRoom.host_id === this.user.id;
+        },
+        
+        // 判断当前用户是否已准备
+        isCurrentUserReady() {
+            if (!this.currentRoom || !this.user.id) return false;
+            
+            const currentPlayer = this.currentRoom.players.find(player => player.id === this.user.id);
+            return currentPlayer ? currentPlayer.is_ready : false;
+        }
+    },
+    
     created() {
         // 检查本地存储中的认证信息
         const token = localStorage.getItem('token');
@@ -329,6 +345,18 @@ const app = Vue.createApp({
         async startGame() {
             if (!this.currentRoom) return;
             
+            // 检查是否是房主
+            if (!this.isCurrentUserHost) {
+                this.showNotification('只有房主可以开始游戏', 'error');
+                return;
+            }
+            
+            // 检查是否所有玩家都已准备
+            if (!this.currentRoom.all_players_ready && this.currentRoom.players.length > 1) {
+                this.showNotification('还有玩家未准备，无法开始游戏', 'error');
+                return;
+            }
+            
             try {
                 const response = await axios.post(`${API_BASE_URL}/rooms/${this.currentRoom.id}/start`, {
                     scene: this.startGameForm.scene,
@@ -355,6 +383,56 @@ const app = Vue.createApp({
             } catch (error) {
                 console.error('开始游戏失败:', error);
                 this.showNotification('开始游戏失败: ' + (error.response?.data?.detail || '未知错误'), 'error');
+            }
+        },
+        
+        // 设置玩家准备状态
+        async setReady(isReady) {
+            if (!this.currentRoom) return;
+            
+            try {
+                const response = await axios.post(`${API_BASE_URL}/rooms/${this.currentRoom.id}/ready`, {
+                    is_ready: isReady
+                });
+                
+                // 更新当前房间
+                await this.loadRoomDetail(this.currentRoom.id);
+                
+                // 显示通知
+                this.showNotification(isReady ? '已准备' : '已取消准备', 'success');
+                
+                // 添加系统消息
+                this.addSystemMessage(isReady ? '你已准备' : '你已取消准备');
+            } catch (error) {
+                console.error('设置准备状态失败:', error);
+                this.showNotification('设置准备状态失败: ' + (error.response?.data?.detail || '未知错误'), 'error');
+            }
+        },
+        
+        // 踢出玩家
+        async kickPlayer(playerId) {
+            if (!this.currentRoom) return;
+            
+            // 检查是否是房主
+            if (!this.isCurrentUserHost) {
+                this.showNotification('只有房主可以踢出玩家', 'error');
+                return;
+            }
+            
+            try {
+                const response = await axios.post(`${API_BASE_URL}/rooms/${this.currentRoom.id}/kick/${playerId}`);
+                
+                // 更新当前房间
+                await this.loadRoomDetail(this.currentRoom.id);
+                
+                // 显示通知
+                this.showNotification('玩家已被踢出', 'success');
+                
+                // 添加系统消息
+                this.addSystemMessage('你踢出了一名玩家');
+            } catch (error) {
+                console.error('踢出玩家失败:', error);
+                this.showNotification('踢出玩家失败: ' + (error.response?.data?.detail || '未知错误'), 'error');
             }
         },
         

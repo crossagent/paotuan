@@ -8,3 +8,5 @@ websockets
 python-jose
 passlib
 PyJWT
+python-multipart
+bcrypt

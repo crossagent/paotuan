@@ -317,7 +317,7 @@ class SetScenarioCommand(GameCommand):
         # 构建剧本详情消息
         scenario_details = f"【剧本详情】\n"
         scenario_details += f"名称: {scenario.name}\n"
-        scenario_details += f"背景: {scenario.background[:100]}...\n"
+        scenario_details += f"背景: {scenario.world_background[:100]}...\n"
         scenario_details += f"目标: {scenario.goal}\n"
         
         messages = []

@@ -30,6 +30,8 @@ class Player(BaseModel):
     attributes: Dict[str, Any] = {}
     items: List[str] = []
     location: Optional[str] = None  # 玩家当前位置，格式为"楼层/房间"
+    is_ready: bool = False  # 玩家是否已准备
+    is_host: bool = False   # 是否为房主
 
 class NextTurnInfo(BaseModel):
     """下一回合信息模型"""
@@ -84,3 +86,4 @@ class Room(BaseModel):
     matches: List[Match] = []
     current_match_id: Optional[str] = None
     settings: Dict[str, Any] = {}
+    host_id: Optional[str] = None  # 房主ID

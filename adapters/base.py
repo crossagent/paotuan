@@ -85,6 +85,19 @@ class JoinRoomEvent(GameEvent):
             }
         )
 
+class PlayerLeftEvent(GameEvent):
+    """玩家离开事件"""
+    def __init__(self, player_id: str, player_name: str, room_id: str, room_empty: bool = False):
+        super().__init__(
+            event_type="PLAYER_LEFT",
+            data={
+                "player_id": player_id,
+                "player_name": player_name,
+                "room_id": room_id,
+                "room_empty": room_empty
+            }
+        )
+
 class ListRoomsEvent(GameEvent):
     """查询房间列表事件"""
     def __init__(self, player_id: str):

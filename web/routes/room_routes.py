@@ -5,7 +5,7 @@ import logging
 
 from web.routes.user_routes import get_current_user
 from web.auth import User
-from models.entities import Room as GameRoom
+from models.entities import Room as GameRoom, GameStatus
 
 # 创建路由器
 router = APIRouter(
@@ -125,6 +125,9 @@ async def get_room(
     # 获取当前游戏局
     current_match = room_manager.get_current_match()
     
+    # 获取房主
+    host = room_manager.get_host()
+    
     # 构建玩家列表
     players = []
     for player in room.players:
@@ -134,19 +137,27 @@ async def get_room(
             "joined_at": player.joined_at,
             "health": player.health,
             "alive": player.alive,
-            "location": player.location
+            "location": player.location,
+            "is_ready": player.is_ready,
+            "is_host": player.is_host
         })
+    
+    # 检查是否所有非房主玩家都已准备
+    all_ready = room_manager.are_all_players_ready()
     
     return {
         "id": room.id,
         "name": room.name,
         "created_at": room.created_at,
         "players": players,
+        "host_id": room.host_id,
+        "all_players_ready": all_ready,
         "current_match": {
             "id": current_match.id,
             "status": current_match.status,
             "scene": current_match.scene,
-            "created_at": current_match.created_at
+            "created_at": current_match.created_at,
+            "scenario_id": current_match.scenario_id
         } if current_match else None,
         "settings": room.settings
     }
@@ -214,7 +225,7 @@ async def leave_room(
     room_manager = RoomManager(room, game_instance)
     
     # 将玩家从房间中移除
-    success = room_manager.remove_player(current_user.id)
+    success, event = room_manager.remove_player(current_user.id)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -222,6 +233,10 @@ async def leave_room(
         )
     
     logger.info(f"玩家离开房间: {current_user.username} (ID: {current_user.id}), 房间: {room.name} (ID: {room_id})")
+    
+    # 如果返回了事件，发布到事件总线
+    if event and game_instance.event_bus:
+        await game_instance.event_bus.publish(event)
     
     return {
         "success": True,
@@ -253,9 +268,24 @@ async def start_game(
     from core.room import RoomManager
     room_manager = RoomManager(room, game_instance)
     
+    # 检查是否是房主
+    host = room_manager.get_host()
+    if not host or host.id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="只有房主可以开始游戏"
+        )
+    
+    # 检查是否所有玩家都已准备
+    if not room_manager.are_all_players_ready() and len(room.players) > 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="还有玩家未准备，无法开始游戏"
+        )
+    
     # 检查是否有进行中的游戏
     current_match = room_manager.get_current_match()
-    if current_match and current_match.status == "RUNNING":
+    if current_match and current_match.status == GameStatus.RUNNING:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="已有进行中的游戏"
@@ -279,8 +309,11 @@ async def start_game(
                 )
         
         # 更新游戏状态
-        from models.entities import GameStatus
         match.status = GameStatus.RUNNING
+        
+        # 重置所有玩家的准备状态
+        for player in room.players:
+            player.is_ready = False
         
         logger.info(f"开始游戏: 房间={room.name} (ID: {room_id}), 场景={scene}, 剧本ID={scenario_id}")
         
@@ -295,3 +328,113 @@ async def start_game(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
+
+# 设置玩家准备状态
+@router.post("/{room_id}/ready", response_model=Dict[str, Any])
+async def set_player_ready(
+    room_id: str,
+    ready_data: Dict[str, Any],
+    current_user: User = Depends(get_current_user)
+):
+    """设置玩家准备状态"""
+    if not game_instance:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="游戏服务器未启动"
+        )
+    
+    room = game_instance.rooms.get(room_id)
+    if not room:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="房间不存在"
+        )
+    
+    # 创建房间管理器
+    from core.room import RoomManager
+    room_manager = RoomManager(room, game_instance)
+    
+    # 获取准备状态
+    is_ready = ready_data.get("is_ready", True)
+    
+    # 检查是否是房主
+    host = room_manager.get_host()
+    if host and host.id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="房主不需要准备"
+        )
+    
+    # 设置准备状态
+    success = room_manager.set_player_ready(current_user.id, is_ready)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="设置准备状态失败，玩家可能不在房间中"
+        )
+    
+    # 检查是否所有玩家都已准备
+    all_ready = room_manager.are_all_players_ready()
+    
+    logger.info(f"玩家 {current_user.username} (ID: {current_user.id}) {'准备完毕' if is_ready else '取消准备'}")
+    
+    return {
+        "success": True,
+        "is_ready": is_ready,
+        "all_players_ready": all_ready
+    }
+
+# 踢出玩家
+@router.post("/{room_id}/kick/{player_id}", response_model=Dict[str, Any])
+async def kick_player(
+    room_id: str,
+    player_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """房主踢出玩家"""
+    if not game_instance:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="游戏服务器未启动"
+        )
+    
+    room = game_instance.rooms.get(room_id)
+    if not room:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="房间不存在"
+        )
+    
+    # 创建房间管理器
+    from core.room import RoomManager
+    room_manager = RoomManager(room, game_instance)
+    
+    # 检查是否是房主
+    host = room_manager.get_host()
+    if not host or host.id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="只有房主可以踢出玩家"
+        )
+    
+    # 不能踢出自己
+    if player_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="不能踢出自己"
+        )
+    
+    # 踢出玩家
+    success, event = room_manager.kick_player(player_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="踢出玩家失败，玩家可能不在房间中或是房主"
+        )
+    
+    logger.info(f"房主 {current_user.username} (ID: {current_user.id}) 踢出玩家 (ID: {player_id})")
+    
+    return {
+        "success": True,
+        "message": "玩家已被踢出"
+    }

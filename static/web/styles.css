@@ -402,10 +402,71 @@ a:hover {
     border-bottom: 1px solid var(--border-color);
 }
 
+.player-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.player-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
 .player-status {
     font-size: 0.75rem;
     padding: 0.25rem 0.5rem;
     border-radius: 4px;
+}
+
+.host-badge {
+    background-color: var(--primary-color);
+    color: white;
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+}
+
+.ready-badge {
+    background-color: var(--secondary-color);
+    color: white;
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+}
+
+.not-ready-badge {
+    background-color: var(--warning-color);
+    color: white;
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+}
+
+.ready-controls {
+    margin-top: 1rem;
+    display: flex;
+    justify-content: center;
+}
+
+.host-tip {
+    margin-top: 1rem;
+    padding: 0.5rem;
+    background-color: #fff3cd;
+    border: 1px solid #ffeeba;
+    border-radius: 4px;
+    color: #856404;
+    font-size: 0.875rem;
+    text-align: center;
+}
+
+.btn-danger {
+    background-color: var(--danger-color);
+    color: white;
+}
+
+.btn-danger:hover {
+    background-color: #c0392b;
 }
 
 .player-status.alive {

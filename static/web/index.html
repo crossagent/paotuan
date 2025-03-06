@@ -183,7 +183,14 @@
                         <div class="game-header">
                             <h2>{{ currentRoom.name }}</h2>
                             <div class="game-controls">
-                                <button v-if="!currentRoom.current_match" @click="showStartGameModal = true" class="btn btn-primary">开始游戏</button>
+                                <!-- 只有房主才能看到开始游戏按钮，且所有玩家都准备好才能点击 -->
+                                <button 
+                                    v-if="isCurrentUserHost && !currentRoom.current_match" 
+                                    @click="showStartGameModal = true" 
+                                    class="btn btn-primary"
+                                    :disabled="!currentRoom.all_players_ready && currentRoom.players.length > 1">
+                                    开始游戏
+                                </button>
                                 <button @click="leaveRoom" class="btn">离开房间</button>
                             </div>
                         </div>
@@ -193,12 +200,47 @@
                                 <h3>玩家列表</h3>
                                 <ul class="players-list">
                                     <li v-for="player in currentRoom.players" :key="player.id" class="player-item">
-                                        <span class="player-name">{{ player.name }}</span>
-                                        <span class="player-status" :class="{'alive': player.alive, 'dead': !player.alive}">
-                                            {{ player.alive ? '存活' : '死亡' }}
-                                        </span>
+                                        <div class="player-info">
+                                            <span class="player-name">{{ player.name }}</span>
+                                            <span v-if="player.is_host" class="host-badge">房主</span>
+                                            <span v-else-if="player.is_ready" class="ready-badge">已准备</span>
+                                            <span v-else class="not-ready-badge">未准备</span>
+                                            <span class="player-status" :class="{'alive': player.alive, 'dead': !player.alive}">
+                                                {{ player.alive ? '存活' : '死亡' }}
+                                            </span>
+                                        </div>
+                                        <div class="player-actions">
+                                            <!-- 房主可以踢出其他玩家 -->
+                                            <button 
+                                                v-if="isCurrentUserHost && player.id !== user.id" 
+                                                @click="kickPlayer(player.id)" 
+                                                class="btn btn-small btn-danger">
+                                                踢出
+                                            </button>
+                                        </div>
                                     </li>
                                 </ul>
+                                
+                                <!-- 准备按钮 (非房主玩家) -->
+                                <div v-if="!isCurrentUserHost && !currentRoom.current_match" class="ready-controls">
+                                    <button 
+                                        v-if="!isCurrentUserReady" 
+                                        @click="setReady(true)" 
+                                        class="btn btn-primary">
+                                        准备
+                                    </button>
+                                    <button 
+                                        v-else 
+                                        @click="setReady(false)" 
+                                        class="btn">
+                                        取消准备
+                                    </button>
+                                </div>
+                                
+                                <!-- 房主提示 -->
+                                <div v-if="isCurrentUserHost && !currentRoom.all_players_ready && currentRoom.players.length > 1" class="host-tip">
+                                    等待所有玩家准备完毕后才能开始游戏
+                                </div>
                             </div>
                             
                             <div class="game-main">

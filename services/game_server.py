@@ -53,6 +53,7 @@ class GameServer:
         self.event_bus.subscribe("CREATE_ROOM", self._handle_event)
         self.event_bus.subscribe("JOIN_ROOM", self._handle_event)
         self.event_bus.subscribe("LIST_ROOMS", self._handle_event)
+        self.event_bus.subscribe("PLAYER_LEFT", self._handle_player_left)
     
     async def _handle_event(self, event: GameEvent) -> List[Union[GameEvent, Dict[str, str]]]:
         """使用命令模式处理事件"""
@@ -123,6 +124,29 @@ class GameServer:
                     
             # 适当休眠以避免CPU占用过高
             await asyncio.sleep(0.1)
+            
+    async def _handle_player_left(self, event: GameEvent) -> List[Union[GameEvent, Dict[str, str]]]:
+        """处理玩家离开事件"""
+        try:
+            player_id = event.data.get("player_id")
+            player_name = event.data.get("player_name")
+            room_id = event.data.get("room_id")
+            room_empty = event.data.get("room_empty", False)
+            
+            logger.info(f"玩家离开: {player_name} (ID: {player_id}), 房间: {room_id}, 房间是否为空: {room_empty}")
+            
+            # 如果房间为空，自动关闭房间
+            if room_empty and room_id in self.game_instance.rooms:
+                logger.info(f"自动关闭空房间: {room_id}")
+                del self.game_instance.rooms[room_id]
+                
+                # 通知其他玩家房间已关闭
+                return [{"recipient": player_id, "content": f"房间已自动关闭: {room_id}"}]
+                
+            return []
+        except Exception as e:
+            logger.exception(f"处理玩家离开事件失败: {str(e)}")
+            return []
             
     async def _process_event(self, event: GameEvent) -> None:
         """处理事件"""

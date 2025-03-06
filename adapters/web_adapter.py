@@ -175,20 +175,34 @@ class WebSocketConnection:
             await self.send_message(f"欢迎 {self.player_name}！输入 /help 查看可用命令。")
             
             # 处理消息
-            async for message in self.websocket:
-                if isinstance(message, str):
-                    # 文本消息
-                    await self.adapter.handle_message(self.player_id, self.player_name, message)
-                elif isinstance(message, bytes):
-                    # 二进制消息，尝试解码为JSON
-                    try:
-                        data = json.loads(message.decode('utf-8'))
-                        if 'type' in data and 'content' in data:
-                            if data['type'] == 'message':
-                                await self.adapter.handle_message(self.player_id, self.player_name, data['content'])
-                    except Exception as e:
-                        logger.error(f"解析二进制消息失败: {str(e)}")
-                        await self.send_message("消息格式错误")
+            while not self.closed:
+                try:
+                    # 使用receive_text()或receive_json()方法接收消息
+                    message_type = await self.websocket.receive()
+                    
+                    if message_type["type"] == "websocket.disconnect":
+                        logger.info(f"WebSocket客户端断开连接: {self.player_id}")
+                        break
+                        
+                    if message_type["type"] == "websocket.receive":
+                        if "text" in message_type:
+                            # 文本消息
+                            message = message_type["text"]
+                            await self.adapter.handle_message(self.player_id, self.player_name, message)
+                        elif "bytes" in message_type:
+                            # 二进制消息，尝试解码为JSON
+                            try:
+                                data = json.loads(message_type["bytes"].decode('utf-8'))
+                                if 'type' in data and 'content' in data:
+                                    if data['type'] == 'message':
+                                        await self.adapter.handle_message(self.player_id, self.player_name, data['content'])
+                            except Exception as e:
+                                logger.error(f"解析二进制消息失败: {str(e)}")
+                                await self.send_message("消息格式错误")
+                except Exception as e:
+                    logger.error(f"接收WebSocket消息失败: {str(e)}")
+                    if "Connection closed" in str(e):
+                        break
         except Exception as e:
             logger.exception(f"WebSocket连接异常: {str(e)}")
         finally:
