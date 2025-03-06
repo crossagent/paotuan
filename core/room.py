@@ -46,7 +46,13 @@ class RoomManager:
             
         # 更新当前游戏的场景和剧本ID
         current_match.scenario_id = scenario_id
-        current_match.scene = scenario.scene
+        # 使用剧本的主要场景或第一个场景作为当前场景
+        if scenario.main_scene:
+            current_match.scene = scenario.main_scene
+        elif scenario.scenes and len(scenario.scenes) > 0:
+            current_match.scene = scenario.scenes[0].name
+        else:
+            current_match.scene = "未知场景"
         
         logger.info(f"为房间 {self.room.name} 设置剧本: {scenario.name}")
         return True
