@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TRPG游戏平台</title>
+    <link rel="stylesheet" href="/static/web/styles.css">
+    <!-- 引入Vue.js -->
+    <script src="https://cdn.jsdelivr.net/npm/vue@3.2.31/dist/vue.global.js"></script>
+    <!-- 引入Axios -->
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <div id="app">
+        <!-- 登录/注册页面 -->
+        <div v-if="!isAuthenticated" class="auth-container">
+            <div class="auth-box">
+                <h1>TRPG游戏平台</h1>
+                
+                <div class="tabs">
+                    <button 
+                        :class="{'active': authMode === 'login'}" 
+                        @click="authMode = 'login'">登录</button>
+                    <button 
+                        :class="{'active': authMode === 'register'}" 
+                        @click="authMode = 'register'">注册</button>
+                </div>
+                
+                <div v-if="authMode === 'login'" class="auth-form">
+                    <h2>用户登录</h2>
+                    <div class="form-group">
+                        <label for="login-username">用户名</label>
+                        <input 
+                            type="text" 
+                            id="login-username" 
+                            v-model="loginForm.username" 
+                            placeholder="请输入用户名">
+                    </div>
+                    <div class="form-group">
+                        <label for="login-password">密码</label>
+                        <input 
+                            type="password" 
+                            id="login-password" 
+                            v-model="loginForm.password" 
+                            placeholder="请输入密码">
+                    </div>
+                    <button @click="login" class="btn btn-primary">登录</button>
+                    <p v-if="loginError" class="error-message">{{ loginError }}</p>
+                </div>
+                
+                <div v-if="authMode === 'register'" class="auth-form">
+                    <h2>用户注册</h2>
+                    <div class="form-group">
+                        <label for="register-username">用户名</label>
+                        <input 
+                            type="text" 
+                            id="register-username" 
+                            v-model="registerForm.username" 
+                            placeholder="请输入用户名">
+                    </div>
+                    <div class="form-group">
+                        <label for="register-email">邮箱</label>
+                        <input 
+                            type="email" 
+                            id="register-email" 
+                            v-model="registerForm.email" 
+                            placeholder="请输入邮箱">
+                    </div>
+                    <div class="form-group">
+                        <label for="register-password">密码</label>
+                        <input 
+                            type="password" 
+                            id="register-password" 
+                            v-model="registerForm.password" 
+                            placeholder="请输入密码">
+                    </div>
+                    <button @click="register" class="btn btn-primary">注册</button>
+                    <p v-if="registerError" class="error-message">{{ registerError }}</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 主应用页面 -->
+        <div v-else class="main-container">
+            <!-- 顶部导航栏 -->
+            <header class="main-header">
+                <div class="logo">TRPG游戏平台</div>
+                <nav class="main-nav">
+                    <button 
+                        :class="{'active': currentView === 'rooms'}" 
+                        @click="currentView = 'rooms'">房间列表</button>
+                    <button 
+                        :class="{'active': currentView === 'game'}" 
+                        @click="currentView = 'game'">游戏</button>
+                </nav>
+                <div class="user-info">
+                    <span>{{ user.username }}</span>
+                    <button @click="logout" class="btn btn-small">退出</button>
+                </div>
+            </header>
+            
+            <!-- 主内容区域 -->
+            <main class="main-content">
+                <!-- 房间列表视图 -->
+                <div v-if="currentView === 'rooms'" class="rooms-view">
+                    <div class="rooms-header">
+                        <h2>游戏房间</h2>
+                        <button @click="showCreateRoomModal = true" class="btn btn-primary">创建房间</button>
+                    </div>
+                    
+                    <div class="rooms-list">
+                        <div v-if="rooms.length === 0" class="no-rooms">
+                            <p>暂无可用房间，请创建一个新房间</p>
+                        </div>
+                        <div v-else class="room-cards">
+                            <div 
+                                v-for="room in rooms" 
+                                :key="room.id" 
+                                class="room-card"
+                                @click="selectRoom(room)">
+                                <h3>{{ room.name }}</h3>
+                                <div class="room-info">
+                                    <span>玩家数: {{ room.player_count }}</span>
+                                    <span>状态: {{ room.has_active_match ? '游戏中' : '等待中' }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 创建房间模态框 -->
+                    <div v-if="showCreateRoomModal" class="modal">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h2>创建新房间</h2>
+                                <button @click="showCreateRoomModal = false" class="close-btn">&times;</button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="form-group">
+                                    <label for="room-name">房间名称</label>
+                                    <input 
+                                        type="text" 
+                                        id="room-name" 
+                                        v-model="createRoomForm.name" 
+                                        placeholder="请输入房间名称">
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button @click="showCreateRoomModal = false" class="btn">取消</button>
+                                <button @click="createRoom" class="btn btn-primary">创建</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 房间详情模态框 -->
+                    <div v-if="selectedRoom" class="modal">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h2>{{ selectedRoom.name }}</h2>
+                                <button @click="selectedRoom = null" class="close-btn">&times;</button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="room-details">
+                                    <p>房间ID: {{ selectedRoom.id }}</p>
+                                    <p>玩家数: {{ selectedRoom.player_count }}</p>
+                                    <p>状态: {{ selectedRoom.has_active_match ? '游戏中' : '等待中' }}</p>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button @click="selectedRoom = null" class="btn">关闭</button>
+                                <button @click="joinRoom(selectedRoom)" class="btn btn-primary">加入房间</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 游戏视图 -->
+                <div v-if="currentView === 'game'" class="game-view">
+                    <div v-if="!currentRoom" class="no-game">
+                        <p>您当前不在任何房间中</p>
+                        <button @click="currentView = 'rooms'" class="btn btn-primary">查看房间列表</button>
+                    </div>
+                    <div v-else class="game-container">
+                        <div class="game-header">
+                            <h2>{{ currentRoom.name }}</h2>
+                            <div class="game-controls">
+                                <button v-if="!currentRoom.current_match" @click="showStartGameModal = true" class="btn btn-primary">开始游戏</button>
+                                <button @click="leaveRoom" class="btn">离开房间</button>
+                            </div>
+                        </div>
+                        
+                        <div class="game-content">
+                            <div class="players-panel">
+                                <h3>玩家列表</h3>
+                                <ul class="players-list">
+                                    <li v-for="player in currentRoom.players" :key="player.id" class="player-item">
+                                        <span class="player-name">{{ player.name }}</span>
+                                        <span class="player-status" :class="{'alive': player.alive, 'dead': !player.alive}">
+                                            {{ player.alive ? '存活' : '死亡' }}
+                                        </span>
+                                    </li>
+                                </ul>
+                            </div>
+                            
+                            <div class="game-main">
+                                <div class="game-messages">
+                                    <div v-for="(message, index) in gameMessages" :key="index" class="message" :class="message.type">
+                                        <div v-if="message.type === 'system'" class="system-message">
+                                            {{ message.content }}
+                                        </div>
+                                        <div v-else-if="message.type === 'dm'" class="dm-message">
+                                            <div class="message-header">DM:</div>
+                                            <div class="message-content">{{ message.content }}</div>
+                                        </div>
+                                        <div v-else class="player-message">
+                                            <div class="message-header">{{ message.sender }}:</div>
+                                            <div class="message-content">{{ message.content }}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="game-input">
+                                    <input 
+                                        type="text" 
+                                        v-model="actionInput" 
+                                        @keyup.enter="sendAction"
+                                        placeholder="输入你的行动...">
+                                    <button @click="sendAction" class="btn btn-primary">发送</button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 开始游戏模态框 -->
+                        <div v-if="showStartGameModal" class="modal">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h2>开始游戏</h2>
+                                    <button @click="showStartGameModal = false" class="close-btn">&times;</button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="form-group">
+                                        <label for="scenario-select">选择剧本</label>
+                                        <select id="scenario-select" v-model="startGameForm.scenario_id">
+                                            <option value="">-- 不使用剧本 --</option>
+                                            <option v-for="scenario in scenarios" :key="scenario.id" :value="scenario.id">
+                                                {{ scenario.name }}
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="scene-input">场景名称</label>
+                                        <input 
+                                            type="text" 
+                                            id="scene-input" 
+                                            v-model="startGameForm.scene" 
+                                            placeholder="请输入场景名称">
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button @click="showStartGameModal = false" class="btn">取消</button>
+                                    <button @click="startGame" class="btn btn-primary">开始游戏</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+        
+        <!-- 全局消息提示 -->
+        <div v-if="notification.show" class="notification" :class="notification.type">
+            {{ notification.message }}
+        </div>
+    </div>
+    
+    <script src="/static/web/app.js"></script>
+</body>
+</html>

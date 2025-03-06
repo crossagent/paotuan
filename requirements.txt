@@ -2,3 +2,9 @@ dingtalk_stream
 pyyaml
 langchain
 langsmith
+fastapi
+uvicorn
+websockets
+python-jose
+passlib
+PyJWT
