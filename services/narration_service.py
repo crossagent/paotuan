@@ -111,18 +111,26 @@ class NarrationService:
             player_id = location_update.player_id
             new_location = location_update.new_location
             
-            # 更新玩家位置
+            # 查找玩家对应的角色并更新位置
             for player in players:
                 if player.id == player_id:
-                    player.location = new_location
-                    logger.info(f"更新玩家位置: 玩家={player.name}({player_id}), 新位置={new_location}")
+                    # 找到玩家后，查找对应的角色
+                    character = None
+                    for char in player.room.characters:
+                        if char.player_id == player_id:
+                            character = char
+                            break
                     
-                    # 如果有剧本，也更新剧本中的玩家位置
-                    if scenario:
-                        scenario.player_location = new_location
-                        scenario_loader = ScenarioLoader()
-                        scenario_loader.save_scenario(scenario)
-                        logger.info(f"更新剧本中的玩家位置: 新位置={new_location}")
+                    if character:
+                        character.location = new_location
+                        logger.info(f"更新角色位置: 角色ID={character.id}, 玩家={player.name}({player_id}), 新位置={new_location}")
+                        
+                        # 如果有剧本，也更新剧本中的玩家位置
+                        if scenario:
+                            scenario.player_location = new_location
+                            scenario_loader = ScenarioLoader()
+                            scenario_loader.save_scenario(scenario)
+                            logger.info(f"更新剧本中的玩家位置: 新位置={new_location}")
                     break
                     
         return messages
@@ -136,29 +144,37 @@ class NarrationService:
             item = item_update.item
             action = item_update.action
             
-            # 更新玩家物品
+            # 查找玩家对应的角色并更新物品
             for player in players:
                 if player.id == player_id:
-                    if action == "add" and item not in player.items:
-                        player.items.append(item)
-                        logger.info(f"玩家获得物品: 玩家={player.name}({player_id}), 物品={item}")
-                        
-                        # 如果有剧本，也更新剧本中的已收集道具
-                        if scenario and item not in scenario.collected_items:
-                            scenario.collected_items.append(item)
-                            scenario_loader = ScenarioLoader()
-                            scenario_loader.save_scenario(scenario)
-                            logger.info(f"更新剧本中的已收集道具: 添加物品={item}")
-                    elif action == "remove" and item in player.items:
-                        player.items.remove(item)
-                        logger.info(f"玩家失去物品: 玩家={player.name}({player_id}), 物品={item}")
-                        
-                        # 如果有剧本，也更新剧本中的已收集道具
-                        if scenario and item in scenario.collected_items:
-                            scenario.collected_items.remove(item)
-                            scenario_loader = ScenarioLoader()
-                            scenario_loader.save_scenario(scenario)
-                            logger.info(f"更新剧本中的已收集道具: 移除物品={item}")
+                    # 找到玩家后，查找对应的角色
+                    character = None
+                    for char in player.room.characters:
+                        if char.player_id == player_id:
+                            character = char
+                            break
+                    
+                    if character:
+                        if action == "add" and item not in character.items:
+                            character.items.append(item)
+                            logger.info(f"角色获得物品: 角色ID={character.id}, 玩家={player.name}({player_id}), 物品={item}")
+                            
+                            # 如果有剧本，也更新剧本中的已收集道具
+                            if scenario and item not in scenario.collected_items:
+                                scenario.collected_items.append(item)
+                                scenario_loader = ScenarioLoader()
+                                scenario_loader.save_scenario(scenario)
+                                logger.info(f"更新剧本中的已收集道具: 添加物品={item}")
+                        elif action == "remove" and item in character.items:
+                            character.items.remove(item)
+                            logger.info(f"角色失去物品: 角色ID={character.id}, 玩家={player.name}({player_id}), 物品={item}")
+                            
+                            # 如果有剧本，也更新剧本中的已收集道具
+                            if scenario and item in scenario.collected_items:
+                                scenario.collected_items.remove(item)
+                                scenario_loader = ScenarioLoader()
+                                scenario_loader.save_scenario(scenario)
+                                logger.info(f"更新剧本中的已收集道具: 移除物品={item}")
                     break
                     
         return messages

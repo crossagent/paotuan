@@ -6,7 +6,7 @@ from typing import Optional, Dict, Any, List, Callable
 from dingtalk_stream import DingTalkStreamClient, Credential, ChatbotMessage, AckMessage
 from dingtalk_stream.frames import Headers
 from dingtalk_stream.chatbot import ChatbotHandler
-from adapters.base import MessageAdapter, GameEvent, PlayerJoinedEvent, PlayerActionEvent, PlayerRequestStartEvent, SetScenarioEvent, CreateRoomEvent, JoinRoomEvent, ListRoomsEvent
+from adapters.base import MessageAdapter, GameEvent, PlayerJoinedEvent, PlayerActionEvent, PlayerRequestStartEvent, SetScenarioEvent, CreateRoomEvent, JoinRoomEvent, ListRoomsEvent, SelectCharacterEvent
 from adapters.command_handler import CommandHandler
 
 logger = logging.getLogger(__name__)
@@ -36,6 +36,12 @@ class DingTalkHandler(ChatbotHandler):
             "/剧本", ["/scenario"], 
             lambda pid, pname, args: SetScenarioEvent(pid, args.strip()),
             "设置剧本（必须在游戏开始前），用法: /剧本 [剧本ID]"
+        )
+        # 注册选择角色命令
+        self.cmd_handler.register(
+            "/选角色", ["/select_character"], 
+            lambda pid, pname, args: SelectCharacterEvent(pid, args.strip()),
+            "选择角色（必须在游戏开始前），用法: /选角色 [角色名]"
         )
         # 注册房间相关命令
         self.cmd_handler.register(

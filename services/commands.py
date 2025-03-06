@@ -2,13 +2,13 @@ import logging
 import asyncio
 from typing import List, Dict, Any, Optional, Union
 
-from models.entities import Room, Match, TurnType, TurnStatus, GameStatus, BaseTurn, DMTurn, ActionTurn, DiceTurn
+from models.entities import Room, Match, Player, Character, TurnType, TurnStatus, GameStatus, BaseTurn, DMTurn, ActionTurn, DiceTurn
 from core.game import GameInstance
 from core.room import RoomManager
 from core.turn import TurnManager
 from core.rules import RuleEngine
 from core.events import EventBus
-from adapters.base import GameEvent, PlayerJoinedEvent, PlayerActionEvent, DMNarrationEvent, SetScenarioEvent, CreateRoomEvent, JoinRoomEvent, ListRoomsEvent
+from adapters.base import GameEvent, PlayerJoinedEvent, PlayerActionEvent, DMNarrationEvent, SetScenarioEvent, CreateRoomEvent, JoinRoomEvent, ListRoomsEvent, SelectCharacterEvent
 from services.ai_service import AIService
 from utils.scenario_loader import ScenarioLoader
 
@@ -126,6 +126,11 @@ class PlayerActionCommand(GameCommand):
         # 创建房间管理器
         room_manager = RoomManager(player_room, self.game_instance)
         
+        # 获取玩家对应的角色
+        character = room_manager.get_character_by_player_id(player_id)
+        if not character:
+            return [{"recipient": player_id, "content": "找不到你的游戏角色，请尝试重新加入房间"}]
+        
         # 检查是否有进行中的游戏局
         match = room_manager.get_current_match()
         if not match:
@@ -220,8 +225,38 @@ class StartGameCommand(GameCommand):
             # 5. 检查是否已设置剧本
             if not current_match.scenario_id:
                 return await self._send_scenario_list(player_id, "请先设置剧本再开始游戏！")
+                
+            # 6. 检查是否所有玩家都已选择角色
+            players_without_characters = []
+            for p in player_room.players:
+                if not p.character_id:
+                    players_without_characters.append(p.name)
+                    
+            if players_without_characters:
+                # 如果有玩家未选择角色，提示选择角色
+                player_list = ", ".join(players_without_characters)
+                
+                # 加载可选角色列表
+                available_characters = room_manager.load_available_characters()
+                
+                # 构建可选角色列表消息
+                character_msg = "【可选角色】\n"
+                if available_characters:
+                    for char in available_characters:
+                        char_name = char.get("name", "未知")
+                        char_desc = char.get("description", "")
+                        char_type = "主要角色" if char.get("is_main", True) else "次要角色"
+                        character_msg += f"- {char_name} ({char_type}): {char_desc[:50]}...\n"
+                    character_msg += "\n使用 /选角色 [角色名] 选择你要扮演的角色"
+                else:
+                    character_msg += "当前剧本没有可选角色\n"
+                
+                return [
+                    {"recipient": player_id, "content": f"以下玩家尚未选择角色: {player_list}，请先选择角色再开始游戏！"},
+                    {"recipient": player_id, "content": character_msg}
+                ]
             
-            # 6. 所有条件都满足，可以开始游戏
+            # 7. 所有条件都满足，可以开始游戏
             # 设置游戏状态为运行中
             current_match.status = GameStatus.RUNNING
             logger.info(f"游戏局开始运行: ID={current_match.id}, 状态={current_match.status}")
@@ -314,16 +349,31 @@ class SetScenarioCommand(GameCommand):
         if not success:
             return [{"recipient": player_id, "content": "设置剧本失败。剧本只能在游戏开始前设置。"}]
             
+        # 加载可选角色列表
+        available_characters = room_manager.load_available_characters()
+        
         # 构建剧本详情消息
         scenario_details = f"【剧本详情】\n"
         scenario_details += f"名称: {scenario.name}\n"
         scenario_details += f"背景: {scenario.world_background[:100]}...\n"
-        scenario_details += f"目标: {scenario.goal}\n"
+        
+        # 构建可选角色列表消息
+        character_msg = "【可选角色】\n"
+        if available_characters:
+            for char in available_characters:
+                char_name = char.get("name", "未知")
+                char_desc = char.get("description", "")
+                char_type = "主要角色" if char.get("is_main", True) else "次要角色"
+                character_msg += f"- {char_name} ({char_type}): {char_desc[:50]}...\n"
+            character_msg += "\n使用 /选角色 [角色名] 选择你要扮演的角色"
+        else:
+            character_msg += "当前剧本没有可选角色\n"
         
         messages = []
         # 通知所有玩家
         for p in player_room.players:
             messages.append({"recipient": p.id, "content": f"DM设置了新剧本: {scenario.name}"})
+            messages.append({"recipient": p.id, "content": character_msg})
             
         # 给DM发送详细信息
         messages.append({"recipient": player_id, "content": scenario_details})
@@ -335,6 +385,50 @@ class SetScenarioCommand(GameCommand):
             messages.append(DMNarrationEvent("", player_room.id))
             
         return messages
+
+
+class SelectCharacterCommand(GameCommand):
+    """处理选择角色事件的命令"""
+    
+    async def execute(self, event: SelectCharacterEvent) -> List[Union[GameEvent, Dict[str, str]]]:
+        player_id = event.data["player_id"]
+        character_name = event.data["character_name"]
+        
+        logger.info(f"处理选择角色事件: 玩家ID={player_id}, 角色名称={character_name}")
+        
+        # 查找玩家所在的房间
+        player_room = self._get_player_room(player_id)
+                
+        # 如果找不到玩家所在的房间，提示玩家加入房间
+        if not player_room:
+            return [{"recipient": player_id, "content": "你尚未加入任何房间，请先使用 /加入游戏 或 /加入房间 [房间ID] 加入房间"}]
+        
+        # 创建房间管理器
+        room_manager = RoomManager(player_room, self.game_instance)
+        
+        # 选择角色
+        success, message = room_manager.select_character(player_id, character_name)
+        
+        # 查找玩家名称
+        player_name = "未知玩家"
+        for p in player_room.players:
+            if p.id == player_id:
+                player_name = p.name
+                break
+        
+        if success:
+            # 通知所有玩家
+            messages = []
+            for p in player_room.players:
+                if p.id != player_id:  # 不通知选择角色的玩家自己
+                    messages.append({"recipient": p.id, "content": f"玩家 {player_name} 选择了角色: {character_name}"})
+            
+            # 通知选择角色的玩家
+            messages.append({"recipient": player_id, "content": message})
+            return messages
+        else:
+            # 选择失败，只通知选择角色的玩家
+            return [{"recipient": player_id, "content": message}]
 
 
 class DMNarrationCommand(GameCommand):
@@ -500,6 +594,7 @@ class ListRoomsCommand(GameCommand):
         
         if not rooms:
             return [{"recipient": player_id, "content": "当前没有可用的房间，请使用 /创建房间 [房间名] 创建新房间"}]
+        
         
         # 构建房间列表消息
         rooms_msg = "可用房间列表:\n"

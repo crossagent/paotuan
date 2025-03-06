@@ -21,17 +21,24 @@ class TurnStatus(str, Enum):
     COMPLETED = "COMPLETED"  # 已完成
 
 class Player(BaseModel):
-    """玩家模型"""
+    """玩家模型 - 代表现实世界的用户"""
     id: str
     name: str
     joined_at: datetime = datetime.now()
+    is_ready: bool = False  # 玩家是否已准备
+    is_host: bool = False   # 是否为房主
+    character_id: Optional[str] = None  # 关联的游戏角色ID
+
+class Character(BaseModel):
+    """角色模型 - 代表游戏世界中的实体"""
+    id: str
+    name: str
+    player_id: Optional[str] = None  # 控制此角色的玩家ID，可以为None表示NPC
     health: int = 100
     alive: bool = True
     attributes: Dict[str, Any] = {}
     items: List[str] = []
-    location: Optional[str] = None  # 玩家当前位置，格式为"楼层/房间"
-    is_ready: bool = False  # 玩家是否已准备
-    is_host: bool = False   # 是否为房主
+    location: Optional[str] = None  # 角色当前位置，格式为"楼层/房间"
 
 class NextTurnInfo(BaseModel):
     """下一回合信息模型"""
@@ -76,6 +83,8 @@ class Match(BaseModel):
     current_turn_id: Optional[str] = None
     game_state: Dict[str, Any] = {}
     scenario_id: Optional[str] = None  # 关联的剧本ID
+    characters: List[Character] = []  # 游戏局中的角色列表
+    available_characters: List[Dict[str, Any]] = []  # 可选角色列表
 
 class Room(BaseModel):
     """房间模型"""

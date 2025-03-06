@@ -3,7 +3,7 @@ import uuid
 import logging
 from datetime import datetime
 
-from models.entities import Match, BaseTurn, DMTurn, ActionTurn, DiceTurn, TurnType, TurnStatus, Player, NextTurnInfo
+from models.entities import Match, BaseTurn, DMTurn, ActionTurn, DiceTurn, TurnType, TurnStatus, Player, Character, NextTurnInfo
 from core.rules import RuleEngine
 from adapters.base import GameEvent, PlayerActionEvent, DMNarrationEvent
 
@@ -132,21 +132,29 @@ class TurnManager:
                 "action": action  # 记录玩家实际想做的行动
             }
             
-            # 如果判定失败，减少玩家血量
+            # 如果判定失败，减少角色血量
             if not success:
-                # 获取玩家对象
-                player = None
-                for p in self.match.players:
-                    if p.id == player_id:
-                        player = p
+                # 获取玩家对应的角色
+                character = None
+                # 从房间中查找角色
+                for room in self.match.game_instance.rooms.values():
+                    for player in room.players:
+                        if player.id == player_id:
+                            # 找到玩家后，查找对应的角色
+                            for char in room.characters:
+                                if char.player_id == player_id:
+                                    character = char
+                                    break
+                            break
+                    if character:
                         break
                 
-                if player:
+                if character:
                     # 根据难度和失败程度计算血量减少值
                     # 失败时，血量减少值为难度的一半（向上取整）
                     health_change = -((difficulty + 1) // 2)
-                    rule_engine.apply_health_change(player, health_change)
-                    logger.info(f"玩家 {player_id} 判定失败，生命值变化: {health_change}，当前生命值: {player.health}")
+                    rule_engine.apply_health_change(character, health_change)
+                    logger.info(f"角色 {character.id} (玩家 {player_id}) 判定失败，生命值变化: {health_change}，当前生命值: {character.health}")
             
             logger.info(f"玩家 {player_id} 尝试: {action}, 掷骰子结果: {roll}, 难度: {difficulty}, {'成功' if success else '失败'}")
         else:

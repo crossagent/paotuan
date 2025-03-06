@@ -108,6 +108,17 @@ class ListRoomsEvent(GameEvent):
             }
         )
 
+class SelectCharacterEvent(GameEvent):
+    """选择角色事件"""
+    def __init__(self, player_id: str, character_name: str):
+        super().__init__(
+            event_type="SELECT_CHARACTER",
+            data={
+                "player_id": player_id,
+                "character_name": character_name
+            }
+        )
+
 class MessageAdapter(ABC):
     """消息适配器抽象基类"""
     

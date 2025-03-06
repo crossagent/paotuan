@@ -3,7 +3,7 @@ import uuid
 import logging
 from datetime import datetime
 
-from models.entities import Room, Match, Player, GameStatus, Turn, TurnType, TurnStatus
+from models.entities import Room, Match, Player, Character, GameStatus, Turn, TurnType, TurnStatus
 from core.events import EventBus
 from adapters.base import GameEvent, PlayerJoinedEvent, PlayerActionEvent, DMNarrationEvent
 
@@ -17,6 +17,7 @@ class GameInstance:
         self.rooms: Dict[str, Room] = {}
         self.event_bus = EventBus()
         self.player_room_map: Dict[str, str] = {}  # player_id -> room_id
+        self.player_character_map: Dict[str, str] = {}  # player_id -> character_id
         
     def get_available_scenarios(self) -> List[Dict[str, str]]:
         """获取可用的剧本列表

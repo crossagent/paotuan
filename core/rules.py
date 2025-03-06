@@ -2,7 +2,7 @@ from typing import Dict, List, Optional, Any, Tuple, Union
 import random
 import logging
 
-from models.entities import Player, Match, Turn, TurnType, DiceTurn
+from models.entities import Player, Character, Match, Turn, TurnType, DiceTurn
 
 logger = logging.getLogger(__name__)
 
@@ -23,13 +23,13 @@ class RuleEngine:
         success = self.check_success(roll, difficulty)
         return success, roll
     
-    def apply_health_change(self, player: Player, change: int) -> None:
+    def apply_health_change(self, character: Character, change: int) -> None:
         """应用生命值变化"""
-        player.health += change
+        character.health += change
         # 确保生命值在有效范围内
-        player.health = max(0, min(100, player.health))
+        character.health = max(0, min(100, character.health))
         # 更新存活状态
-        player.alive = player.health > 0
+        character.alive = character.health > 0
         
     def process_dice_turn_results(self, turn: DiceTurn) -> Dict[str, Any]:
         """处理掷骰子回合的结果，返回处理后的综合结果

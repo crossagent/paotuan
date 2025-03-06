@@ -4,7 +4,7 @@ import logging
 import random
 from datetime import datetime
 
-from models.entities import Room, Match, Player, GameStatus, Turn, TurnType, TurnStatus
+from models.entities import Room, Match, Player, Character, GameStatus, Turn, TurnType, TurnStatus
 from adapters.base import GameEvent, PlayerJoinedEvent, PlayerActionEvent, PlayerLeftEvent
 
 logger = logging.getLogger(__name__)
@@ -69,7 +69,7 @@ class RoomManager:
                     self.game_instance.player_room_map[player_id] = self.room.id
                 return player
                 
-        # 创建新玩家
+        # 创建新玩家，但不创建角色
         new_player = Player(id=player_id, name=player_name)
         
         # 如果房间为空，设置为房主
@@ -78,6 +78,7 @@ class RoomManager:
             self.room.host_id = player_id
             logger.info(f"设置玩家为房主: {player_name} (ID: {player_id})")
             
+        # 添加玩家到房间
         self.room.players.append(new_player)
         
         # 更新玩家-房间映射
@@ -101,10 +102,24 @@ class RoomManager:
                 removed_player = self.room.players.pop(i)
                 player_name = removed_player.name
                 was_host = removed_player.is_host
+                character_id = removed_player.character_id
+                
+                # 从当前游戏局中移除对应的角色
+                current_match = self.get_current_match()
+                if current_match and character_id:
+                    for j, character in enumerate(current_match.characters):
+                        if character.id == character_id:
+                            current_match.characters.pop(j)
+                            logger.info(f"从游戏局中移除角色: ID={character_id}")
+                            break
                 
                 # 从映射中移除
                 if self.game_instance and player_id in self.game_instance.player_room_map:
                     del self.game_instance.player_room_map[player_id]
+                
+                # 从角色映射中移除
+                if self.game_instance and player_id in self.game_instance.player_character_map:
+                    del self.game_instance.player_character_map[player_id]
                 
                 logger.info(f"玩家离开房间: {player_name} (ID: {player_id})")
                 
@@ -312,3 +327,183 @@ class RoomManager:
                 return player
                 
         return None
+        
+    def get_character_by_player_id(self, player_id: str) -> Optional[Character]:
+        """根据玩家ID获取对应的角色
+        
+        Args:
+            player_id: 玩家ID
+            
+        Returns:
+            玩家对应的角色，如果找不到则返回None
+        """
+        # 先找到玩家
+        player = None
+        for p in self.room.players:
+            if p.id == player_id:
+                player = p
+                break
+                
+        if not player or not player.character_id:
+            return None
+            
+        # 获取当前游戏局
+        current_match = self.get_current_match()
+        if not current_match:
+            return None
+            
+        # 根据character_id从当前游戏局中找到对应的角色
+        for character in current_match.characters:
+            if character.id == player.character_id:
+                return character
+                
+        return None
+        
+    def select_character(self, player_id: str, character_name: str) -> Tuple[bool, str]:
+        """玩家选择角色
+        
+        Args:
+            player_id: 玩家ID
+            character_name: 角色名称
+            
+        Returns:
+            (是否选择成功, 消息)
+        """
+        # 获取当前游戏局
+        current_match = self.get_current_match()
+        if not current_match:
+            return False, "当前没有游戏局，无法选择角色"
+            
+        # 检查游戏状态，只允许在游戏开始前（WAITING状态）选择角色
+        if current_match.status != GameStatus.WAITING:
+            return False, "游戏已经开始，无法更换角色"
+            
+        # 检查剧本是否已设置
+        if not current_match.scenario_id:
+            return False, "请先设置剧本再选择角色"
+            
+        # 检查可选角色列表是否为空
+        if not current_match.available_characters:
+            return False, "当前剧本没有可选角色"
+            
+        # 查找玩家
+        player = None
+        for p in self.room.players:
+            if p.id == player_id:
+                player = p
+                break
+                
+        if not player:
+            return False, "找不到玩家"
+            
+        # 查找角色
+        selected_character_info = None
+        for char_info in current_match.available_characters:
+            if char_info.get("name") == character_name:
+                selected_character_info = char_info
+                break
+                
+        if not selected_character_info:
+            available_chars = ", ".join([c.get("name", "未知") for c in current_match.available_characters])
+            return False, f"找不到角色: {character_name}。可选角色: {available_chars}"
+            
+        # 检查角色是否已被选择
+        for character in current_match.characters:
+            if character.name == character_name and character.player_id is not None:
+                return False, f"角色 {character_name} 已被其他玩家选择"
+                
+        # 如果玩家已有角色，先解除绑定
+        if player.character_id:
+            for character in current_match.characters:
+                if character.id == player.character_id:
+                    character.player_id = None
+                    logger.info(f"解除玩家 {player.name} 与角色 {character.name} 的绑定")
+                    break
+                    
+        # 创建新角色或使用现有角色
+        character_exists = False
+        for character in current_match.characters:
+            if character.name == character_name and character.player_id is None:
+                character.player_id = player_id
+                player.character_id = character.id
+                character_exists = True
+                logger.info(f"玩家 {player.name} 选择了现有角色 {character_name}")
+                break
+                
+        if not character_exists:
+            # 创建新角色
+            character_id = str(uuid.uuid4())
+            new_character = Character(
+                id=character_id,
+                name=character_name,
+                player_id=player_id,
+                attributes=selected_character_info.get("attributes", {})
+            )
+            
+            # 添加角色到游戏局
+            current_match.characters.append(new_character)
+            
+            # 关联玩家和角色
+            player.character_id = character_id
+            
+            logger.info(f"玩家 {player.name} 选择了角色 {character_name}，创建角色ID: {character_id}")
+            
+        # 更新玩家-角色映射
+        if self.game_instance:
+            self.game_instance.player_character_map[player_id] = player.character_id
+            
+        return True, f"成功选择角色: {character_name}"
+        
+    def load_available_characters(self) -> List[Dict[str, Any]]:
+        """从剧本中加载可选角色列表
+        
+        Returns:
+            可选角色列表
+        """
+        # 获取当前游戏局
+        current_match = self.get_current_match()
+        if not current_match or not current_match.scenario_id:
+            logger.warning("当前没有游戏局或未设置剧本，无法加载可选角色")
+            return []
+            
+        # 加载剧本
+        from utils.scenario_loader import ScenarioLoader
+        scenario_loader = ScenarioLoader()
+        scenario = scenario_loader.load_scenario(current_match.scenario_id)
+        
+        if not scenario:
+            logger.warning(f"剧本不存在: {current_match.scenario_id}")
+            return []
+            
+        # 提取角色信息
+        available_characters = []
+        
+        # 添加主要角色
+        if hasattr(scenario, "characters") and scenario.characters:
+            for char in scenario.characters:
+                if hasattr(char, "name") and char.name:
+                    available_characters.append({
+                        "name": char.name,
+                        "description": getattr(char, "description", ""),
+                        "is_main": getattr(char, "is_main", True),
+                        "attributes": {}
+                    })
+        
+        # 如果没有角色，尝试从重要角色中提取
+        if not available_characters and hasattr(scenario, "important_characters"):
+            for char_type, chars in scenario.important_characters.items():
+                for char in chars:
+                    if isinstance(char, dict) and "角色名称" in char:
+                        available_characters.append({
+                            "name": char["角色名称"],
+                            "description": char.get("描述", ""),
+                            "is_main": char_type == "主要角色",
+                            "attributes": {}
+                        })
+        
+        # 更新游戏局的可选角色列表
+        if current_match:
+            current_match.available_characters = available_characters
+            logger.info(f"为游戏局 {current_match.id} 加载了 {len(available_characters)} 个可选角色")
+            
+        return available_characters

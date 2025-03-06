@@ -46,6 +46,7 @@ class GameServer:
         """注册事件处理器"""
         self.event_bus.subscribe("PLAYER_JOINED", self._handle_event)
         self.event_bus.subscribe("PLAYER_ACTION", self._handle_event)
+        self.event_bus.subscribe("SELECT_CHARACTER", self._handle_event)
         self.event_bus.subscribe("DM_NARRATION", self._handle_event)
         self.event_bus.subscribe("START_MATCH", self._handle_event)
         self.event_bus.subscribe("SET_SCENARIO", self._handle_event)
