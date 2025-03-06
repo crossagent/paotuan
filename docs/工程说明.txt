@@ -1,0 +1,140 @@
+# TRPG跑团助手工程说明
+
+## 1. 项目概述
+这是一个基于钉钉作为前端界面的TRPG（桌面角色扮演游戏）跑团系统。系统采用分层架构设计，支持多种通信方式，并使用AI服务来增强游戏体验。
+
+## 2. 目录结构
+project/
+├── adapters/          # 通信适配器
+│   ├── init .py
+│   ├── base.py       # 基础适配器接口
+│   ├── command_handler.py  # 命令处理器
+│   └── dingtalk.py   # 钉钉适配器实现
+├── ai/               # AI相关功能
+│   └── chains/      # AI链路定义
+├── core/             # 游戏核心逻辑
+│   ├── init .py
+│   ├── events.py    # 事件定义
+│   ├── game.py      # 游戏实例
+│   ├── room.py      # 房间逻辑
+│   ├── rules.py     # 游戏规则
+│   └── turn.py      # 回合管理
+├── models/           # 数据模型
+│   ├── init .py
+│   ├── entities.py  # 基础实体定义
+│   └── scenario.py  # 剧本相关模型
+├── persistence/      # 数据持久层
+│   ├── init .py
+│   └── repository.py # 数据仓库
+├── services/         # 服务层
+│   ├── init .py
+│   ├── ai_service.py # AI服务
+│   └── game_server.py # 游戏服务器
+├── utils/            # 工具类
+│   └── scenario_loader.py # 剧本加载器
+├── story/            # 剧本资源
+│   └── scenarios/    # 剧本JSON文件
+├── static/          # 静态资源
+├── config/          # 配置文件
+│   ├── ding_config.yaml    # 钉钉配置
+│   ├── game_config.yaml    # 游戏配置
+│   └── llm_settings.yaml   # AI模型配置
+├── docs/            # 文档
+├── requirements.txt  # 依赖项
+├── main.py          # 程序入口
+└── docker-compose.yml # Docker配置
+
+
+## 3. 核心组件说明
+
+### 3.1 通信适配层
+- 基于抽象适配器接口设计
+- 当前实现了钉钉适配器
+- 支持命令处理和消息转发
+
+### 3.2 游戏核心层
+- 游戏实例管理
+- 房间系统
+- 回合管理
+- 规则引擎
+
+### 3.3 剧本系统
+- JSON格式剧本定义
+- 支持多层地图
+- NPC系统
+- 道具系统
+- 剧情节点管理
+
+### 3.4 数据持久化
+- 抽象仓库接口
+- 文件系统实现
+- JSON格式数据存储
+
+### 3.5 AI服务
+- 支持OpenAI接口
+- 可扩展的AI服务接口
+- 用于生成剧情内容
+
+## 4. 配置说明
+
+### 4.1 环境变量
+- OPENAI_API_KEY: OpenAI API密钥
+- OPENAI_MODEL: 使用的模型（默认：gpt-3.5-turbo）
+- OPENAI_TEMP: 生成温度（默认：0.7）
+- DINGTALK_CLIENT_ID: 钉钉应用ID
+- DINGTALK_CLIENT_SECRET: 钉钉应用密钥
+
+### 4.2 Docker配置
+- 端口：54232（状态检查器Web界面）
+- 挂载目录：
+  - ./config:/app/config
+  - ./static:/app/static
+
+## 5. 主要功能
+
+### 5.1 剧本管理
+- 剧本加载和保存
+- 剧本列表查询
+- 位置描述生成
+- 道具收集系统
+
+### 5.2 游戏流程
+- 房间创建和管理
+- 玩家加入/退出
+- 回合控制
+- 事件处理
+
+### 5.3 AI增强
+- 故事生成
+- NPC对话
+- 场景描述
+- 剧情发展
+
+## 6. 技术栈
+- Python
+- Docker
+- OpenAI API
+- 钉钉开放平台
+- JSON数据存储
+- 异步编程（asyncio）
+
+## 7. 部署说明
+1. 配置环境变量
+2. 安装依赖：pip install -r requirements.txt
+3. 配置钉钉应用参数
+4. 启动服务：
+   - 直接启动：python main.py
+   - Docker启动：docker-compose up -d
+
+## 8. 扩展性设计
+- 支持多种通信协议
+- 可扩展的AI服务接口
+- 插件式规则引擎
+- 灵活的剧本格式
+- 可配置的持久化方案
+
+## 9. 注意事项
+- 确保配置文件正确设置
+- 定期备份游戏数据
+- 监控AI服务使用情况
+- 注意网络连接状态

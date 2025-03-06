@@ -42,10 +42,13 @@ class PlayerActionEvent(GameEvent):
 
 class DMNarrationEvent(GameEvent):
     """DM叙述事件"""
-    def __init__(self, narration: str):
+    def __init__(self, narration: str, room_id: str = None):
         super().__init__(
             event_type="DM_NARRATION",
-            data={"narration": narration}
+            data={
+                "narration": narration,
+                "room_id": room_id
+            }
         )
 
 class SetScenarioEvent(GameEvent):
@@ -56,6 +59,39 @@ class SetScenarioEvent(GameEvent):
             data={
                 "player_id": player_id,
                 "scenario_id": scenario_id
+            }
+        )
+
+class CreateRoomEvent(GameEvent):
+    """创建房间事件"""
+    def __init__(self, player_id: str, room_name: str):
+        super().__init__(
+            event_type="CREATE_ROOM",
+            data={
+                "player_id": player_id,
+                "room_name": room_name
+            }
+        )
+
+class JoinRoomEvent(GameEvent):
+    """加入房间事件"""
+    def __init__(self, player_id: str, player_name: str, room_id: str):
+        super().__init__(
+            event_type="JOIN_ROOM",
+            data={
+                "player_id": player_id,
+                "player_name": player_name,
+                "room_id": room_id
+            }
+        )
+
+class ListRoomsEvent(GameEvent):
+    """查询房间列表事件"""
+    def __init__(self, player_id: str):
+        super().__init__(
+            event_type="LIST_ROOMS",
+            data={
+                "player_id": player_id
             }
         )
 

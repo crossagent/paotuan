@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any, Tuple, Union
 import uuid
 import logging
 from datetime import datetime
@@ -16,6 +16,7 @@ class GameInstance:
         self.game_id = game_id
         self.rooms: Dict[str, Room] = {}
         self.event_bus = EventBus()
+        self.player_room_map: Dict[str, str] = {}  # player_id -> room_id
         
     def get_available_scenarios(self) -> List[Dict[str, str]]:
         """获取可用的剧本列表
@@ -78,3 +79,35 @@ class GameInstance:
     def list_rooms(self) -> List[Room]:
         """列出所有房间"""
         return list(self.rooms.values())
+        
+    def get_player_room(self, player_id: str) -> Optional[Room]:
+        """根据玩家ID获取所在房间
+        
+        Args:
+            player_id: 玩家ID
+            
+        Returns:
+            玩家所在的房间，如果玩家不在任何房间则返回None
+        """
+        room_id = self.player_room_map.get(player_id)
+        if not room_id:
+            return None
+        return self.get_room(room_id)
+    
+    def get_player_match(self, player_id: str) -> Optional[Match]:
+        """根据玩家ID获取当前活跃Match
+        
+        Args:
+            player_id: 玩家ID
+            
+        Returns:
+            玩家当前的游戏局，如果玩家不在任何房间或房间没有活跃游戏局则返回None
+        """
+        room = self.get_player_room(player_id)
+        if not room or not room.current_match_id:
+            return None
+            
+        for match in room.matches:
+            if match.id == room.current_match_id:
+                return match
+        return None

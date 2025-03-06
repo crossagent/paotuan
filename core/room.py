@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
 import uuid
 import logging
 from datetime import datetime
@@ -11,8 +11,9 @@ logger = logging.getLogger(__name__)
 class RoomManager:
     """房间管理器"""
     
-    def __init__(self, room: Room):
+    def __init__(self, room: Room, game_instance=None):
         self.room = room
+        self.game_instance = game_instance
         
     def set_scenario(self, scenario_id: str) -> bool:
         """设置当前游戏使用的剧本
@@ -56,13 +57,42 @@ class RoomManager:
         for player in self.room.players:
             if player.id == player_id:
                 logger.info(f"玩家已在房间中: {player_name} (ID: {player_id})")
+                # 确保玩家-房间映射存在
+                if self.game_instance:
+                    self.game_instance.player_room_map[player_id] = self.room.id
                 return player
                 
         # 创建新玩家
         new_player = Player(id=player_id, name=player_name)
         self.room.players.append(new_player)
+        
+        # 更新玩家-房间映射
+        if self.game_instance:
+            self.game_instance.player_room_map[player_id] = self.room.id
+            
         logger.info(f"玩家加入房间: {player_name} (ID: {player_id})")
         return new_player
+        
+    def remove_player(self, player_id: str) -> bool:
+        """将玩家从房间中移除
+        
+        Args:
+            player_id: 玩家ID
+            
+        Returns:
+            是否成功移除玩家
+        """
+        for i, player in enumerate(self.room.players):
+            if player.id == player_id:
+                self.room.players.pop(i)
+                
+                # 从映射中移除
+                if self.game_instance and player_id in self.game_instance.player_room_map:
+                    del self.game_instance.player_room_map[player_id]
+                    
+                logger.info(f"玩家离开房间: {player.name} (ID: {player_id})")
+                return True
+        return False
     
     def create_match(self, scene: str) -> Match:
         """创建新游戏局"""
@@ -99,3 +129,20 @@ class RoomManager:
     def list_players(self) -> List[Player]:
         """列出房间中的所有玩家"""
         return self.room.players
+        
+    def broadcast_to_room(self, message: str, exclude_players: List[str] = None) -> List[Dict[str, str]]:
+        """向房间中所有玩家广播消息
+        
+        Args:
+            message: 要广播的消息内容
+            exclude_players: 要排除的玩家ID列表
+            
+        Returns:
+            消息列表，每个消息包含recipient和content
+        """
+        exclude_players = exclude_players or []
+        messages = []
+        for player in self.room.players:
+            if player.id not in exclude_players:
+                messages.append({"recipient": player.id, "content": message})
+        return messages
