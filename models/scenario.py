@@ -1,56 +1,48 @@
 from typing import List, Dict, Any, Optional, Literal
 from pydantic import BaseModel, Field
 
-class KeyItem(BaseModel):
-    """关键道具模型"""
-    position: str = Field(..., description="道具位置")
-    item: str = Field(..., description="道具名称")
-    collected: bool = Field(default=False, description="是否已被收集")
+class Puzzle(BaseModel):
+    """谜题模型"""
+    name: str = Field(..., description="谜题名称")
+    content: str = Field(..., description="谜题内容")
+    possible_items: List[str] = Field(default_factory=list, description="可能包含的道具")
 
-class Room(BaseModel):
-    """房间模型"""
-    name: str = Field(..., description="房间名称")
-    description: str = Field(..., description="房间描述")
-    key_items: List[KeyItem] = Field(default_factory=list, description="房间内的关键道具")
-    discovered: bool = Field(default=False, description="玩家是否已发现该房间")
-    visited: bool = Field(default=False, description="玩家是否已访问该房间")
+class Scene(BaseModel):
+    """场景模型"""
+    name: str = Field(..., description="场景名称")
+    description: str = Field(..., description="场景描述")
+    puzzle: Optional[Puzzle] = Field(None, description="场景中的谜题")
+    discovered: bool = Field(default=False, description="玩家是否已发现该场景")
+    visited: bool = Field(default=False, description="玩家是否已访问该场景")
 
-class Floor(BaseModel):
-    """楼层模型"""
-    name: str = Field(..., description="楼层名称")
-    description: str = Field(..., description="楼层描述")
-    rooms: List[Room] = Field(default_factory=list, description="楼层内的房间")
-    discovered: bool = Field(default=False, description="玩家是否已发现该楼层")
-    
-class Map(BaseModel):
-    """地图模型"""
-    floors: List[Floor] = Field(default_factory=list, description="地图楼层")
+class Character(BaseModel):
+    """角色模型"""
+    name: str = Field(..., description="角色名称")
+    description: str = Field(..., description="角色描述")
+    is_main: bool = Field(default=True, description="是否为主要角色")
+    action_goal: Optional[str] = Field(None, description="行动目标")
+    location: Optional[str] = Field(None, description="角色当前位置")
+    encountered: bool = Field(default=False, description="玩家是否已遇到该角色")
 
-class NPC(BaseModel):
-    """NPC角色模型"""
-    name: str = Field(..., description="NPC名称")
-    description: str = Field(..., description="NPC描述")
-    location: Optional[str] = Field(None, description="NPC当前位置，格式为'楼层/房间'")
-    encountered: bool = Field(default=False, description="玩家是否已遇到该NPC")
+class Event(BaseModel):
+    """事件模型"""
+    name: str = Field(..., description="事件名称")
+    content: str = Field(..., description="事件内容")
+    characters: List[Character] = Field(default_factory=list, description="事件中的角色")
 
 class Scenario(BaseModel):
     """剧本模型"""
     id: str = Field(..., description="剧本唯一标识符")
-    name: str = Field(..., description="剧本名称")
-    goal: str = Field(..., description="游戏目标")
-    scene: str = Field(..., description="场景概述描述")
-    map: Map = Field(..., description="场景地图")
-    key_items: List[str] = Field(default_factory=list, description="关键道具列表")
-    character_settings: Dict[str, Any] = Field(..., description="角色设定")
-    npcs: List[NPC] = Field(default_factory=list, description="NPC列表") 
-    plot_points: List[str] = Field(default_factory=list, description="剧情节点大纲")
-    challenges: List[str] = Field(default_factory=list, description="冲突与挑战")
-    background: str = Field(..., description="背景故事")
-    clues: List[str] = Field(default_factory=list, description="线索与信息")
-    pacing: str = Field(default="", description="节奏与时间设定")
-    rules: str = Field(default="", description="规则与限制")
-    current_plot_point: int = Field(default=0, description="当前剧情节点索引")
-    # 玩家当前位置，格式为"楼层/房间"
+    name: str = Field(default="疯人院", description="剧本名称")
+    victory_conditions: List[str] = Field(default_factory=list, description="胜利条件")
+    failure_conditions: List[str] = Field(default_factory=list, description="失败条件")
+    game_over: bool = Field(default=False, description="游戏是否结束")
+    game_result: Optional[Literal["victory", "failure"]] = Field(None, description="游戏结果")
+    world_background: str = Field(default="", description="世界背景")
+    main_scene: str = Field(default="", description="主要场景")
+    scenes: List[Scene] = Field(default_factory=list, description="场景列表")
+    characters: List[Character] = Field(default_factory=list, description="角色列表")
+    events: List[Event] = Field(default_factory=list, description="事件列表")
+    current_event_index: int = Field(default=0, description="当前事件索引")
     player_location: str = Field(default="", description="玩家当前位置")
-    # 已收集的道具
     collected_items: List[str] = Field(default_factory=list, description="已收集的道具")

@@ -411,7 +411,30 @@ class DMNarrationCommand(GameCommand):
         
         # 处理位置、物品和剧情更新
         update_messages = await narration_service.process_ai_response(response, active_room, scenario)
-        messages.extend(update_messages)
+        
+        # 检查是否有系统通知消息
+        system_notifications = []
+        regular_messages = []
+        
+        for msg in update_messages:
+            # 分离系统通知和普通消息
+            if isinstance(msg, dict) and msg.get("type") == "system_notification":
+                system_notifications.append(msg)
+            else:
+                regular_messages.append(msg)
+        
+        # 处理系统通知
+        for notification in system_notifications:
+            if notification.get("action") == "finish_match":
+                # 更新Match状态为结束
+                if match:
+                    match.status = GameStatus.FINISHED
+                    if "result" in notification:
+                        match.game_state["result"] = notification["result"]
+                    logger.info(f"Match已结束：ID={match.id}, 结果={notification.get('result', 'unknown')}")
+        
+        # 将普通消息添加到返回列表
+        messages.extend(regular_messages)
         
         # 处理回合转换和通知玩家
         turn_messages = await turn_service.handle_turn_transition(response, current_turn, turn_manager, player_ids)

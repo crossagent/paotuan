@@ -33,6 +33,8 @@ class StoryResponse(BaseModel):
     location_updates: List[LocationUpdate] = Field(default_factory=list, description="玩家位置更新")
     item_updates: List[ItemUpdate] = Field(default_factory=list, description="玩家物品更新")
     plot_progress: Optional[int] = Field(None, description="剧情节点进度，如果需要推进")
+    game_over: bool = Field(default=False, description="游戏是否结束")
+    game_result: Optional[Literal["victory", "failure"]] = Field(None, description="游戏结果")
 
 class AIService(ABC):
     """AI服务接口"""
@@ -69,7 +71,7 @@ class OpenAIService(AIService):
         # 初始化输出解析器
         self.output_parser = PydanticOutputParser(pydantic_object=StoryResponse)
         
-    # 构建提示模板
+        # 构建提示模板
         self.prompt = ChatPromptTemplate.from_template(
             template="""你是一个专业的跑团游戏主持人(DM)。
             
@@ -91,7 +93,13 @@ class OpenAIService(AIService):
             【重要】你需要自动更新玩家的位置和物品：
             1. 当玩家移动到新位置时，返回location_updates字段指定新位置
             2. 当玩家获得或失去物品时，返回item_updates字段更新物品列表
-            3. 当剧情需要推进到下一个节点时，返回plot_progress字段
+            3. 当剧情需要推进到下一个事件时，返回plot_progress字段
+
+            【重要】关于胜利和失败条件：
+            1. 持续评估玩家是否已达成胜利条件或失败条件
+            2. 如果玩家满足任一胜利条件，在narration中说明玩家获胜原因，并将游戏标记为结束
+            3. 如果玩家满足任一失败条件，在narration中说明玩家失败原因，并将游戏标记为结束
+            4. 当游戏结束时，需要在narration中明确标识"游戏结束"
 
             【重要】关于判定：
             1. 判定是一个重要且严肃的事件，不应频繁使用。
@@ -132,56 +140,65 @@ class OpenAIService(AIService):
                 
             # 添加剧本信息（如果有）
             if scenario:
-                # 确定当前剧情节点
-                current_plot_index = scenario.current_plot_point 
-                current_plot = scenario.plot_points[current_plot_index] if current_plot_index < len(scenario.plot_points) else None
-                next_plot = scenario.plot_points[current_plot_index + 1] if current_plot_index + 1 < len(scenario.plot_points) else None
-                
-                # 获取当前位置描述
-                location_desc, visible_items = self._get_location_description(scenario)
-                
-                # 整合剧本信息
-                scenario_context = (
-                    f"剧本名称: {scenario.name}\n"
-                    f"故事背景: {scenario.background}\n"
-                    f"游戏目标: {scenario.goal}\n"
-                )
-                
-                # 添加位置信息
-                scenario_context += f"玩家当前位置: {scenario.player_location}\n"
-                scenario_context += f"当前位置描述: {location_desc}\n"
-                
-                # 添加进度信息
-                scenario_context += f"剧情进度: {current_plot_index + 1}/{len(scenario.plot_points)}\n"
-                if current_plot:
-                    scenario_context += f"当前剧情节点: {current_plot}\n"
-                if next_plot:
-                    scenario_context += f"下一个剧情发展方向: {next_plot}\n"
-                
-                # 添加可见道具
-                if visible_items:
-                    items_desc = []
-                    for item in visible_items:
-                        items_desc.append(f"{item['item']}（位于{item['position']}）")
-                    scenario_context += f"当前位置可见道具: {', '.join(items_desc)}\n"
-                
-                # 添加已收集道具
-                if scenario.collected_items:
-                    scenario_context += f"已收集道具: {', '.join(scenario.collected_items)}\n"
-                
-                # 添加NPC信息
-                if scenario.npcs:
-                    # 筛选当前位置的NPC
-                    location_npcs = []
-                    for npc in scenario.npcs:
-                        if npc.location == scenario.player_location:
-                            location_npcs.append(f"{npc.name} - {npc.description}")
+                try:
+                    # 确定当前事件
+                    current_event_index = scenario.current_event_index 
+                    current_event = scenario.events[current_event_index].content if current_event_index < len(scenario.events) else None
+                    next_event = scenario.events[current_event_index + 1].content if current_event_index + 1 < len(scenario.events) else None
                     
-                    if location_npcs:
-                        scenario_context += f"当前位置的NPC: {'; '.join(location_npcs)}\n"
-                
-                # 添加到输入数据
-                input_data["scenario_info"] = scenario_context
+                    # 获取当前位置描述
+                    location_desc, visible_items = self._get_location_description(scenario)
+                    
+                    # 整合剧本信息
+                    scenario_context = (
+                        f"剧本名称: {scenario.name}\n"
+                        f"世界背景: {scenario.world_background}\n"
+                        f"主要场景: {scenario.main_scene}\n"
+                    )
+                    
+                    # 添加胜利和失败条件
+                    if scenario.victory_conditions:
+                        scenario_context += f"胜利条件: {'; '.join(scenario.victory_conditions)}\n"
+                    
+                    if scenario.failure_conditions:
+                        scenario_context += f"失败条件: {'; '.join(scenario.failure_conditions)}\n"
+                    
+                    # 添加位置信息
+                    scenario_context += f"玩家当前位置: {scenario.player_location}\n"
+                    scenario_context += f"当前位置描述: {location_desc}\n"
+                    
+                    # 添加进度信息
+                    scenario_context += f"事件进度: {current_event_index + 1}/{len(scenario.events)}\n"
+                    if current_event:
+                        scenario_context += f"当前事件: {current_event}\n"
+                    if next_event:
+                        scenario_context += f"下一个事件发展方向: {next_event}\n"
+                    
+                    # 添加可见道具
+                    if visible_items:
+                        items_desc = []
+                        for item in visible_items:
+                            items_desc.append(f"{item['item']}（位于{item['position']}）")
+                        scenario_context += f"当前位置可见道具: {', '.join(items_desc)}\n"
+                    
+                    # 添加已收集道具
+                    if scenario.collected_items:
+                        scenario_context += f"已收集道具: {', '.join(scenario.collected_items)}\n"
+                    
+                    # 添加角色信息
+                    location_characters = []
+                    for character in scenario.characters:
+                        if character.location == scenario.player_location and character.encountered:
+                            location_characters.append(f"{character.name} - {character.description}")
+                    
+                    if location_characters:
+                        scenario_context += f"当前位置的角色: {'; '.join(location_characters)}\n"
+                    
+                    # 添加到输入数据
+                    input_data["scenario_info"] = scenario_context
+                except Exception as e:
+                    logger.exception(f"处理剧本信息失败: {str(e)}")
+                    input_data["scenario_info"] = ""
             else:
                 input_data["scenario_info"] = ""
             
@@ -205,37 +222,28 @@ class OpenAIService(AIService):
             )
             
     def _get_location_description(self, scenario) -> tuple[str, list]:
-        """获取当前位置的描述和可见道具
-        
-        Args:
-            scenario: 剧本对象
-            
-        Returns:
-            当前位置的描述和可见道具列表
-        """
+        """获取当前位置的描述和可见道具"""
         if not scenario.player_location:
             return "", []
             
-        # 获取当前位置
-        floor_name, room_name = scenario.player_location.split("/")
-        
-        # 查找楼层和房间
-        for floor in scenario.map.floors:
-            if floor.name == floor_name:
-                for room in floor.rooms:
-                    if room.name == room_name:
-                        # 整合房间描述
-                        description = f"{floor.description} - {room.description}"
-                        
-                        # 获取未收集的道具
-                        visible_items = []
-                        for key_item in room.key_items:
-                            if not key_item.collected:
-                                visible_items.append({
-                                    "position": key_item.position,
-                                    "item": key_item.item
-                                })
-                        
-                        return description, visible_items
-                        
-        return "", []
+        # 查找当前场景
+        current_scene = None
+        for scene in scenario.scenes:
+            if scene.name == scenario.player_location:
+                current_scene = scene
+                break
+                
+        if not current_scene:
+            return "", []
+            
+        # 返回场景描述和可能的道具
+        possible_items = []
+        if current_scene.puzzle:
+            for item in current_scene.puzzle.possible_items:
+                if item not in scenario.collected_items:
+                    possible_items.append({
+                        "position": current_scene.name,
+                        "item": item
+                    })
+                    
+        return current_scene.description, possible_items

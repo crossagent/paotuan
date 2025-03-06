@@ -1,8 +1,8 @@
 import os
 import json
 import logging
-from typing import List, Dict, Optional, Tuple
-from models.scenario import Scenario, Floor, Room, KeyItem, Map, NPC
+from typing import List, Dict, Optional, Tuple, Any
+from models.scenario import Scenario, Scene, Puzzle, Character, Event
 
 logger = logging.getLogger(__name__)
 
@@ -37,36 +37,27 @@ class ScenarioLoader:
             with open(file_path, 'r', encoding='utf-8') as file:
                 data = json.load(file)
                 
-                # 预处理地图数据
-                map_data = self._process_map_data(data.get("场景地图", []))
+                # 处理场景数据
+                scenes = self._process_scenes_data(data.get("地图与谜题设置", []))
                 
-                # 预处理NPC数据
-                npcs_data = []
-                if "角色设定" in data and "NPC" in data["角色设定"]:
-                    for npc_data in data["角色设定"]["NPC"]:
-                        npcs_data.append(NPC(
-                            name=npc_data["名称"],
-                            description=npc_data["描述"],
-                            location=npc_data.get("位置", None)
-                        ))
+                # 处理角色数据
+                characters = self._process_characters_data(data.get("重要角色", {}))
+                
+                # 处理事件数据
+                events = self._process_events_data(data.get("事件脉络", []))
                 
                 # 创建场景对象
                 scenario = Scenario(
                     id=scenario_id,
-                    name=data.get("剧本名称", "未命名剧本"),
-                    goal=data.get("目标", ""),
-                    scene=data.get("场景", ""),
-                    map=map_data,
-                    key_items=data.get("关键道具", []),
-                    character_settings=data.get("角色设定", {}),
-                    npcs=npcs_data,
-                    plot_points=data.get("剧情节点", []),
-                    challenges=data.get("冲突与挑战", []),
-                    background=data.get("背景故事", ""),
-                    clues=data.get("线索与信息", []),
-                    pacing=data.get("节奏与时间设定", ""),
-                    rules=data.get("规则与限制", ""),
-                    player_location="一楼/大堂"  # 默认起始位置
+                    name="疯人院",
+                    victory_conditions=data.get("胜利条件", []),
+                    failure_conditions=data.get("失败条件", []),  # 从JSON获取失败条件
+                    world_background=data.get("世界背景与主要场景", {}).get("世界背景", ""),
+                    main_scene=data.get("世界背景与主要场景", {}).get("主要场景", ""),
+                    scenes=scenes,
+                    characters=characters,
+                    events=events,
+                    player_location="入口大厅"  # 默认起始位置
                 )
                 
                 return scenario
@@ -75,42 +66,109 @@ class ScenarioLoader:
             logger.exception(f"加载剧本失败: {str(e)}")
             return None
     
-    def _process_map_data(self, map_data) -> Map:
-        """处理地图数据
+    def _process_scenes_data(self, scenes_data: List[Dict[str, Any]]) -> List[Scene]:
+        """处理场景与谜题数据
         
         Args:
-            map_data: 原始地图数据
+            scenes_data: 原始场景数据
             
         Returns:
-            处理后的Map对象
+            处理后的Scene对象列表
         """
-        floors = []
+        scenes = []
         
-        for floor_data in map_data:
-            rooms = []
+        for scene_data in scenes_data:
+            puzzle = None
+            if "谜题" in scene_data:
+                puzzle_data = scene_data["谜题"]
+                puzzle = Puzzle(
+                    name=puzzle_data.get("谜题名称", ""),
+                    content=puzzle_data.get("谜题内容", ""),
+                    possible_items=puzzle_data.get("可能包含的道具", [])
+                )
             
-            for room_data in floor_data.get("房间", []):
-                key_items = []
-                
-                for item_data in room_data.get("关键道具", []):
-                    key_items.append(KeyItem(
-                        position=item_data["位置"],
-                        item=item_data["道具"]
-                    ))
-                
-                rooms.append(Room(
-                    name=room_data["名称"],
-                    description=room_data["描述"],
-                    key_items=key_items
-                ))
-            
-            floors.append(Floor(
-                name=floor_data["楼层"],
-                description=floor_data["描述"],
-                rooms=rooms
+            scenes.append(Scene(
+                name=scene_data.get("场景名称", ""),
+                description=scene_data.get("场景描述", ""),
+                puzzle=puzzle
             ))
         
-        return Map(floors=floors)
+        return scenes
+    
+    def _process_characters_data(self, characters_data: Dict[str, Any]) -> List[Character]:
+        """处理角色数据
+        
+        Args:
+            characters_data: 原始角色数据
+            
+        Returns:
+            处理后的Character对象列表
+        """
+        characters = []
+        
+        # 处理主要角色
+        if "主要角色" in characters_data:
+            for char_data in characters_data["主要角色"]:
+                characters.append(Character(
+                    name=char_data.get("角色名称", ""),
+                    description=char_data.get("描述", ""),
+                    is_main=True
+                ))
+        
+        # 处理次要角色
+        if "次要角色" in characters_data:
+            for char_data in characters_data["次要角色"]:
+                characters.append(Character(
+                    name=char_data.get("角色名称", ""),
+                    description=char_data.get("描述", ""),
+                    is_main=False
+                ))
+        
+        return characters
+    
+    def _process_events_data(self, events_data: List[Dict[str, Any]]) -> List[Event]:
+        """处理事件数据
+        
+        Args:
+            events_data: 原始事件数据
+            
+        Returns:
+            处理后的Event对象列表
+        """
+        events = []
+        
+        for event_data in events_data:
+            event_characters = []
+            
+            # 处理事件中的角色
+            if "事件目标" in event_data:
+                # 主要角色
+                if "登场角色" in event_data["事件目标"]:
+                    for char_data in event_data["事件目标"]["登场角色"]:
+                        event_characters.append(Character(
+                            name=char_data.get("角色名称", ""),
+                            description="",  # 事件中角色无需重复描述
+                            is_main=True,
+                            action_goal=char_data.get("行动目标", "")
+                        ))
+                
+                # 次要角色
+                if "次要角色" in event_data["事件目标"]:
+                    for char_data in event_data["事件目标"]["次要角色"]:
+                        event_characters.append(Character(
+                            name=char_data.get("角色名称", ""),
+                            description="",  # 事件中角色无需重复描述
+                            is_main=False,
+                            action_goal=char_data.get("行动目标", "")
+                        ))
+            
+            events.append(Event(
+                name=event_data.get("事件名称", ""),
+                content=event_data.get("事件内容", ""),
+                characters=event_characters
+            ))
+        
+        return events
     
     def list_scenarios(self) -> List[Dict[str, str]]:
         """列出所有可用的剧本
@@ -130,7 +188,7 @@ class ScenarioLoader:
                         data = json.load(file)
                         scenarios.append({
                             "id": scenario_id,
-                            "name": data.get("剧本名称", "未命名剧本")
+                            "name": data.get("剧本名称", "疯人院")
                         })
         except Exception as e:
             logger.exception(f"列出剧本失败: {str(e)}")
@@ -170,26 +228,24 @@ class ScenarioLoader:
         if not scenario.player_location:
             return "", []
             
-        # 获取当前位置
-        floor_name, room_name = scenario.player_location.split("/")
-        
-        # 查找楼层和房间
-        for floor in scenario.map.floors:
-            if floor.name == floor_name:
-                for room in floor.rooms:
-                    if room.name == room_name:
-                        # 整合房间描述
-                        description = f"{floor.description} - {room.description}"
-                        
-                        # 获取未收集的道具
-                        visible_items = []
-                        for key_item in room.key_items:
-                            if not key_item.collected:
-                                visible_items.append({
-                                    "position": key_item.position,
-                                    "item": key_item.item
-                                })
-                        
-                        return description, visible_items
-                        
-        return "", []
+        # 查找当前场景
+        current_scene = None
+        for scene in scenario.scenes:
+            if scene.name == scenario.player_location:
+                current_scene = scene
+                break
+                
+        if not current_scene:
+            return "", []
+            
+        # 返回场景描述和可能的道具
+        possible_items = []
+        if current_scene.puzzle:
+            for item in current_scene.puzzle.possible_items:
+                if item not in scenario.collected_items:
+                    possible_items.append({
+                        "position": current_scene.name,
+                        "item": item
+                    })
+                    
+        return current_scene.description, possible_items

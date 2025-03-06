@@ -55,7 +55,7 @@ class NarrationService:
         scenario = scenario_loader.load_scenario(match.scenario_id)
         
         if scenario:
-            logger.info(f"加载剧本: {scenario.name}, 当前剧情节点: {scenario.current_plot_point + 1}/{len(scenario.plot_points)}")
+            logger.info(f"加载剧本: {scenario.name}, 当前事件: {scenario.current_event_index + 1}/{len(scenario.events)}")
             
         return scenario
         
@@ -77,7 +77,30 @@ class NarrationService:
         if hasattr(response, 'plot_progress') and response.plot_progress is not None and scenario:
             plot_messages = await self._process_plot_progress(response.plot_progress, scenario, [p.id for p in room.players])
             messages.extend(plot_messages)
+        
+        # 处理游戏结束状态
+        if hasattr(response, 'game_over') and response.game_over and scenario:
+            scenario.game_over = True
+            scenario.game_result = response.game_result
             
+            # 保存剧本状态
+            scenario_loader = ScenarioLoader()
+            scenario_loader.save_scenario(scenario)
+            
+            # 通知所有玩家游戏结束
+            result_type = "胜利" if response.game_result == "victory" else "失败"
+            game_over_message = f"【游戏结束 - {result_type}】\n\n{response.narration}"
+            
+            for player in room.players:
+                messages.append({"recipient": player.id, "content": game_over_message})
+                
+            # 添加一个特殊的系统消息，通知调用者更新Match状态
+            messages.append({
+                "type": "system_notification",
+                "action": "finish_match",
+                "result": response.game_result
+            })
+        
         return messages
         
     async def _process_location_updates(self, location_updates, players, scenario) -> List[Dict[str, str]]:
@@ -144,16 +167,17 @@ class NarrationService:
         """处理剧情进度更新"""
         messages = []
         
-        if plot_progress > scenario.current_plot_point:
-            old_plot_point = scenario.current_plot_point
-            scenario.current_plot_point = min(plot_progress, len(scenario.plot_points) - 1)
+        if plot_progress > scenario.current_event_index:
+            old_event_index = scenario.current_event_index
+            scenario.current_event_index = min(plot_progress, len(scenario.events) - 1)
             scenario_loader = ScenarioLoader()
             scenario_loader.save_scenario(scenario)
-            logger.info(f"更新剧情进度: 从 {old_plot_point + 1} 到 {scenario.current_plot_point + 1}")
+            logger.info(f"更新剧情进度: 从事件 {old_event_index + 1} 到 {scenario.current_event_index + 1}")
             
             # 通知所有玩家剧情进展
-            progress_message = f"【剧情进展】\n{scenario.plot_points[scenario.current_plot_point]}"
-            for pid in player_ids:
-                messages.append({"recipient": pid, "content": progress_message})
+            if scenario.current_event_index < len(scenario.events):
+                progress_message = f"【剧情进展】\n{scenario.events[scenario.current_event_index].content}"
+                for pid in player_ids:
+                    messages.append({"recipient": pid, "content": progress_message})
                 
         return messages
