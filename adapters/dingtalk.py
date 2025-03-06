@@ -20,50 +20,12 @@ class DingTalkHandler(ChatbotHandler):
         self.reply_map: Dict[str, ChatbotMessage] = {}
         self.cmd_handler = CommandHandler()
         
-        # 注册基本命令
-        self.cmd_handler.register(
-            "/加入游戏", ["/join"], 
-            lambda pid, pname, args: PlayerJoinedEvent(pid, pname),
-            "加入游戏"
-        )
-        self.cmd_handler.register(
-            "/开始游戏", ["/start"], 
-            lambda pid, pname, args: PlayerRequestStartEvent(pid, pname),
-            "开始游戏"
-        )
-        # 注册剧本命令
-        self.cmd_handler.register(
-            "/剧本", ["/scenario"], 
-            lambda pid, pname, args: SetScenarioEvent(pid, args.strip()),
-            "设置剧本（必须在游戏开始前），用法: /剧本 [剧本ID]"
-        )
-        # 注册选择角色命令
-        self.cmd_handler.register(
-            "/选角色", ["/select_character"], 
-            lambda pid, pname, args: SelectCharacterEvent(pid, args.strip()),
-            "选择角色（必须在游戏开始前），用法: /选角色 [角色名]"
-        )
-        # 注册房间相关命令
-        self.cmd_handler.register(
-            "/创建房间", ["/create_room"], 
-            lambda pid, pname, args: CreateRoomEvent(pid, args.strip() or f"{pname}的房间"),
-            "创建新房间，用法: /创建房间 [房间名称]"
-        )
-        self.cmd_handler.register(
-            "/加入房间", ["/join_room"], 
-            lambda pid, pname, args: JoinRoomEvent(pid, pname, args.strip()),
-            "加入指定房间，用法: /加入房间 [房间ID]"
-        )
-        self.cmd_handler.register(
-            "/房间列表", ["/list_rooms", "/rooms"], 
-            lambda pid, pname, args: ListRoomsEvent(pid),
-            "查看可用房间列表"
-        )
+        # 系统命令已移除，所有游戏操作通过UI界面完成
         # 注册帮助命令
         self.cmd_handler.register(
             "/help", ["/帮助"], 
             lambda pid, pname, args: None,  # 帮助命令不生成事件
-            "显示帮助信息"
+            "显示帮助信息 - 所有游戏操作现在通过UI界面完成，不再支持聊天命令"
         )
         
     # 删除自定义的raw_process方法，使用父类的实现

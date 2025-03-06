@@ -394,6 +394,126 @@ async def set_player_ready(
         "all_players_ready": all_ready
     }
 
+# 选择角色
+@router.post("/{room_id}/select_character", response_model=Dict[str, Any])
+async def select_character(
+    room_id: str,
+    character_data: Dict[str, Any],
+    current_user: User = Depends(get_current_user)
+):
+    """选择角色"""
+    if not game_instance:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="游戏服务器未启动"
+        )
+    
+    room = game_instance.rooms.get(room_id)
+    if not room:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="房间不存在"
+        )
+    
+    # 创建房间管理器
+    from core.room import RoomManager
+    room_manager = RoomManager(room, game_instance)
+    
+    # 获取角色名称
+    character_name = character_data.get("character_name")
+    if not character_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="角色名称不能为空"
+        )
+    
+    # 选择角色
+    success, message = room_manager.select_character(current_user.id, character_name)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=message
+        )
+    
+    logger.info(f"玩家 {current_user.username} (ID: {current_user.id}) 选择了角色: {character_name}")
+    
+    return {
+        "success": True,
+        "message": message,
+        "character_name": character_name
+    }
+
+# 设置剧本
+@router.post("/{room_id}/set_scenario", response_model=Dict[str, Any])
+async def set_scenario(
+    room_id: str,
+    scenario_data: Dict[str, Any],
+    current_user: User = Depends(get_current_user)
+):
+    """设置剧本"""
+    if not game_instance:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="游戏服务器未启动"
+        )
+    
+    room = game_instance.rooms.get(room_id)
+    if not room:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="房间不存在"
+        )
+    
+    # 创建房间管理器
+    from core.room import RoomManager
+    room_manager = RoomManager(room, game_instance)
+    
+    # 检查是否是房主
+    host = room_manager.get_host()
+    if not host or host.id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="只有房主可以设置剧本"
+        )
+    
+    # 获取剧本ID
+    scenario_id = scenario_data.get("scenario_id")
+    if not scenario_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="剧本ID不能为空"
+        )
+    
+    # 检查剧本是否存在
+    from utils.scenario_loader import ScenarioLoader
+    scenario_loader = ScenarioLoader()
+    scenario = scenario_loader.load_scenario(scenario_id)
+    if not scenario:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"剧本不存在: {scenario_id}"
+        )
+    
+    # 设置剧本
+    success = room_manager.set_scenario(scenario_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="设置剧本失败，游戏可能已经开始"
+        )
+    
+    logger.info(f"房主 {current_user.username} (ID: {current_user.id}) 设置了剧本: {scenario_id}")
+    
+    return {
+        "success": True,
+        "message": f"已设置剧本: {scenario.name}",
+        "scenario": {
+            "id": scenario_id,
+            "name": scenario.name,
+            "description": scenario.description
+        }
+    }
+
 # 踢出玩家
 @router.post("/{room_id}/kick/{player_id}", response_model=Dict[str, Any])
 async def kick_player(
