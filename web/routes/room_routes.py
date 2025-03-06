@@ -131,16 +131,26 @@ async def get_room(
     # 构建玩家列表
     players = []
     for player in room.players:
-        players.append({
+        player_info = {
             "id": player.id,
             "name": player.name,
             "joined_at": player.joined_at,
-            "health": player.health,
-            "alive": player.alive,
-            "location": player.location,
             "is_ready": player.is_ready,
-            "is_host": player.is_host
-        })
+            "is_host": player.is_host,
+            "character_id": player.character_id
+        }
+        
+        # 如果有关联的角色，添加角色信息
+        if current_match and player.character_id:
+            character = next((c for c in current_match.characters if c.id == player.character_id), None)
+            if character:
+                player_info.update({
+                    "health": character.health,
+                    "alive": character.alive,
+                    "location": character.location
+                })
+        
+        players.append(player_info)
     
     # 检查是否所有非房主玩家都已准备
     all_ready = room_manager.are_all_players_ready()

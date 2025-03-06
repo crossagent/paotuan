@@ -159,12 +159,40 @@ class GameStateInspector:
     
     def _format_player(self, player: Player) -> Dict[str, Any]:
         """格式化玩家数据"""
-        return {
+        result = {
             "id": player.id,
             "name": player.name,
             "joined_at": player.joined_at.isoformat(),
-            "health": player.health,
-            "alive": player.alive,
-            "attributes": player.attributes,
-            "items": player.items
+            "is_ready": player.is_ready,
+            "is_host": player.is_host,
+            "character_id": player.character_id
+        }
+        
+        # 如果有游戏实例，尝试查找关联的角色信息
+        if self.game_instance and player.character_id:
+            # 查找当前房间的当前比赛
+            room = None
+            for r in self.game_instance.rooms.values():
+                if player.id in [p.id for p in r.players]:
+                    room = r
+                    break
+            
+            if room and room.current_match_id:
+                match = next((m for m in room.matches if m.id == room.current_match_id), None)
+                if match:
+                    character = next((c for c in match.characters if c.id == player.character_id), None)
+                    if character:
+                        # 添加角色信息
+                        result.update(self._format_character(character))
+        
+        return result
+    
+    def _format_character(self, character) -> Dict[str, Any]:
+        """格式化角色数据"""
+        return {
+            "health": character.health,
+            "alive": character.alive,
+            "attributes": character.attributes,
+            "items": character.items,
+            "location": character.location
         }
