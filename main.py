@@ -8,7 +8,7 @@ import logging
 import yaml
 from typing import Dict, Any
 
-from services.game_server import GameServer
+from services.game_controller import GameController
 from services.ai_service import OpenAIService
 from adapters.dingtalk import DingTalkAdapter
 from utils.logging import setup_logger
@@ -48,11 +48,11 @@ async def main():
         # 创建AI服务
         ai_service = OpenAIService()
         
-        # 创建游戏服务器
-        server = GameServer(ai_service)
+        # 创建游戏控制器
+        controller = GameController(ai_service)
         
-        # 输出服务器信息
-        logger.info("服务器配置信息:")
+        # 输出控制器信息
+        logger.info("控制器配置信息:")
         logger.info(f"- 配置文件: {args.config}")
         logger.info(f"- 日志级别: {args.log_level}")
         logger.info(f"- Web服务器: {'启用' if args.web else '禁用'}")
@@ -78,7 +78,7 @@ async def main():
                 config.get('client_secret', '')
             )
             # 注册适配器
-            server.register_adapter(dingtalk_adapter)
+            controller.register_adapter(dingtalk_adapter)
             logger.info("钉钉适配器已注册")
         
         # 如果启用Web服务器
@@ -87,7 +87,7 @@ async def main():
             from web.server import init_web_adapter, start_server
             
             # 初始化Web适配器
-            web_adapter = init_web_adapter(server)
+            web_adapter = init_web_adapter(controller)
             logger.info("Web适配器已注册")
             
             # 创建Web服务器任务
@@ -96,8 +96,8 @@ async def main():
             )
             logger.info(f"Web服务器任务已创建，将在 http://{args.web_host}:{args.web_port} 上运行")
         
-        # 启动服务器
-        await server.start()
+        # 启动控制器
+        await controller.start()
         
         # 等待终止信号
         try:
@@ -105,10 +105,10 @@ async def main():
             while True:
                 await asyncio.sleep(1)
         except KeyboardInterrupt:
-            logger.info("收到终止信号，正在关闭服务器...")
+            logger.info("收到终止信号，正在关闭控制器...")
         finally:
-            # 停止服务器
-            await server.stop()
+            # 停止控制器
+            await controller.stop()
             
             # 取消Web服务器任务
             if web_server_task:
@@ -119,7 +119,7 @@ async def main():
                     pass
             
     except Exception as e:
-        logger.exception(f"服务器启动失败: {str(e)}")
+        logger.exception(f"控制器启动失败: {str(e)}")
         sys.exit(1)
 
 if __name__ == '__main__':

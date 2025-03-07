@@ -1,14 +1,14 @@
 import logging
 from typing import Dict, Any, Type
 
-from core.game import GameInstance
+from core.game_state import GameState
 from core.events import EventBus
 from core.rules import RuleEngine
 from services.commands.base import GameCommand, ServiceProvider
 from services.commands.room_commands import CreateRoomCommand, JoinRoomCommand, ListRoomsCommand
 from services.commands.player_commands import PlayerJoinedCommand, SelectCharacterCommand, PlayerLeftCommand
 from services.commands.game_commands import StartMatchCommand, EndMatchCommand, SetScenarioCommand, DMNarrationCommand, CharacterActionCommand
-from services.game_service import GameService
+from services.game_state_service import GameStateService
 from services.room_service import RoomService
 from services.match_service import MatchService
 from services.turn_service import TurnService
@@ -19,17 +19,17 @@ logger = logging.getLogger(__name__)
 class CommandServiceProvider(ServiceProvider):
     """命令服务提供者，实现ServiceProvider接口"""
     
-    def __init__(self, game_instance: GameInstance, event_bus: EventBus, 
+    def __init__(self, game_state: GameState, event_bus: EventBus, 
                  ai_service: Any, rule_engine: RuleEngine):
         """初始化服务提供者
         
         Args:
-            game_instance: GameInstance - 游戏实例
+            game_state: GameState - 游戏状态
             event_bus: EventBus - 事件总线
             ai_service: Any - AI服务
             rule_engine: RuleEngine - 规则引擎
         """
-        self.game_instance = game_instance
+        self.game_state = game_state
         self.event_bus = event_bus
         self.ai_service = ai_service
         self.rule_engine = rule_engine
@@ -49,12 +49,12 @@ class CommandServiceProvider(ServiceProvider):
             return self._services[service_type]
         
         # 根据服务类型创建对应的服务实例
-        if service_type == GameService:
-            service = GameService(self.game_instance, self.event_bus)
+        if service_type == GameStateService:
+            service = GameStateService(self.game_state, self.event_bus)
         elif service_type == RoomService:
-            service = RoomService(self.game_instance, self.event_bus)
+            service = RoomService(self.game_state, self.event_bus)
         elif service_type == MatchService:
-            service = MatchService(self.game_instance, self.event_bus)
+            service = MatchService(self.game_state, self.event_bus)
         elif service_type == TurnService:
             service = TurnService(self.rule_engine)
         elif service_type == NarrationService:
@@ -69,18 +69,18 @@ class CommandServiceProvider(ServiceProvider):
 class CommandFactory:
     """命令工厂，用于创建命令对象"""
     
-    def __init__(self, game_instance: GameInstance, event_bus: EventBus, 
+    def __init__(self, game_state: GameState, event_bus: EventBus, 
                  ai_service: Any, rule_engine: RuleEngine):
         """初始化命令工厂
         
         Args:
-            game_instance: GameInstance - 游戏实例
+            game_state: GameState - 游戏状态
             event_bus: EventBus - 事件总线
             ai_service: Any - AI服务
             rule_engine: RuleEngine - 规则引擎
         """
         self.service_provider = CommandServiceProvider(
-            game_instance, event_bus, ai_service, rule_engine
+            game_state, event_bus, ai_service, rule_engine
         )
         
     def create_command(self, event_type: str) -> GameCommand:

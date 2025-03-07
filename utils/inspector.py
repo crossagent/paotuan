@@ -7,8 +7,8 @@ from models.entities import Room, Match, Player, Turn, BaseTurn, DMTurn, ActionT
 class GameStateInspector:
     """游戏状态检查器，提供查询游戏状态的功能"""
     
-    def __init__(self, game_instance=None):
-        self.game_instance = game_instance
+    def __init__(self, game_state=None):
+        self.game_state = game_state
         self.logger = logging.getLogger("game_inspector")
         
     def dump_all_state(self, room_id=None) -> Dict[str, Any]:
@@ -18,10 +18,10 @@ class GameStateInspector:
             "rooms": []
         }
         
-        if not self.game_instance:
+        if not self.game_state:
             return result
             
-        rooms = self.game_instance.rooms
+        rooms = self.game_state.rooms
         
         # 如果指定了房间ID，只导出该房间
         if room_id and room_id in rooms:
@@ -37,10 +37,10 @@ class GameStateInspector:
     
     def dump_room_state(self, room_id) -> Dict[str, Any]:
         """导出房间状态"""
-        if not self.game_instance or not room_id:
+        if not self.game_state or not room_id:
             return {}
             
-        room = self.game_instance.get_room(room_id)
+        room = self.game_state.get_room(room_id)
         if not room:
             return {"error": f"房间不存在: {room_id}"}
             
@@ -48,10 +48,10 @@ class GameStateInspector:
     
     def dump_match_state(self, room_id) -> Dict[str, Any]:
         """导出当前比赛状态"""
-        if not self.game_instance or not room_id:
+        if not self.game_state or not room_id:
             return {}
             
-        room = self.game_instance.get_room(room_id)
+        room = self.game_state.get_room(room_id)
         if not room or not room.current_match_id:
             return {"error": "没有进行中的比赛"}
             
@@ -78,10 +78,10 @@ class GameStateInspector:
     
     def dump_players(self, room_id) -> List[Dict[str, Any]]:
         """导出玩家状态"""
-        if not self.game_instance or not room_id:
+        if not self.game_state or not room_id:
             return []
             
-        room = self.game_instance.get_room(room_id)
+        room = self.game_state.get_room(room_id)
         if not room:
             return [{"error": f"房间不存在: {room_id}"}]
             
@@ -168,11 +168,11 @@ class GameStateInspector:
             "character_id": player.character_id
         }
         
-        # 如果有游戏实例，尝试查找关联的角色信息
-        if self.game_instance and player.character_id:
+        # 如果有游戏状态，尝试查找关联的角色信息
+        if self.game_state and player.character_id:
             # 查找当前房间的当前比赛
             room = None
-            for r in self.game_instance.rooms.values():
+            for r in self.game_state.rooms.values():
                 if player.id in [p.id for p in r.players]:
                     room = r
                     break
