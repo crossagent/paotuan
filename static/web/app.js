@@ -36,7 +36,8 @@ const app = Vue.createApp({
             selectedRoom: null,
             showCreateRoomModal: false,
             createRoomForm: {
-                name: ''
+                name: '',
+                max_players: 6
             },
             
             // 当前房间
@@ -248,7 +249,8 @@ const app = Vue.createApp({
         async createRoom() {
             try {
                 const response = await axios.post(`${API_BASE_URL}/rooms/`, {
-                    name: this.createRoomForm.name || `${this.user.username}的房间`
+                    name: this.createRoomForm.name || `${this.user.username}的房间`,
+                    max_players: this.createRoomForm.max_players || 6
                 });
                 
                 // 添加到房间列表

@@ -143,6 +143,16 @@
                                         v-model="createRoomForm.name" 
                                         placeholder="请输入房间名称">
                                 </div>
+                                <div class="form-group">
+                                    <label for="max-players">最大玩家数</label>
+                                    <input 
+                                        type="number" 
+                                        id="max-players" 
+                                        v-model="createRoomForm.max_players" 
+                                        min="2" 
+                                        max="10" 
+                                        placeholder="请选择最大玩家数">
+                                </div>
                             </div>
                             <div class="modal-footer">
                                 <button @click="showCreateRoomModal = false" class="btn">取消</button>

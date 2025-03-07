@@ -83,16 +83,8 @@ async def list_scenarios(current_user: User = Depends(get_current_user)):
         scenario_loader = ScenarioLoader()
         scenarios = scenario_loader.list_scenarios()
         
-        result = []
-        for scenario_id, scenario in scenarios.items():
-            result.append({
-                "id": scenario_id,
-                "name": scenario.name,
-                "description": scenario.description,
-                "player_count": scenario.player_count
-            })
-        
-        return result
+        # 直接返回列表，因为ScenarioLoader.list_scenarios()已经返回了格式化的列表
+        return scenarios
     except Exception as e:
         logger.error(f"获取剧本列表失败: {str(e)}")
         raise HTTPException(
