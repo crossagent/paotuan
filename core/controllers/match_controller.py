@@ -3,25 +3,20 @@ from typing import List, Dict, Any, Optional, Union, Tuple
 import uuid
 from datetime import datetime
 
-from models.entities import Room, Match, Player, Character, GameStatus
-from utils.scenario_loader import ScenarioLoader
+from models.entities import Match, GameStatus, Character
 
 logger = logging.getLogger(__name__)
 
 class MatchController:
-    """游戏局控制器，负责处理与游戏局(Match)相关的所有逻辑"""
+    """游戏局控制器，仅负责Match实体的基本操作"""
     
-    def __init__(self, match: Match, room: Room, game_instance):
+    def __init__(self, match: Match):
         """初始化游戏局控制器
         
         Args:
             match: Match - 游戏局对象
-            room: Room - 房间对象
-            game_instance - 游戏实例
         """
         self.match = match
-        self.room = room
-        self.game_instance = game_instance
         
     def dump_state(self) -> Dict[str, Any]:
         """返回当前状态供Inspector使用
@@ -84,13 +79,11 @@ class MatchController:
         }
     
     @classmethod
-    def create_match(cls, room: Room, game_instance, name: str = "新的冒险") -> "MatchController":
+    def create_match(cls, scene: str = "新的冒险") -> "MatchController":
         """创建新的游戏局
         
         Args:
-            room: Room - 房间对象
-            game_instance - 游戏实例
-            name: str - 游戏局名称
+            scene: str - 游戏局场景名称
             
         Returns:
             MatchController - 新创建的游戏局控制器
@@ -98,42 +91,14 @@ class MatchController:
         match_id = str(uuid.uuid4())
         new_match = Match(
             id=match_id,
-            scene=name,
+            scene=scene,
             created_at=datetime.now(),
             status=GameStatus.WAITING
         )
         
-        room.matches.append(new_match)
-        room.current_match_id = match_id
+        logger.info(f"创建新游戏局: ID={match_id}, 名称={scene}")
         
-        logger.info(f"创建新游戏局: ID={match_id}, 名称={name}")
-        
-        return cls(new_match, room, game_instance)
-    
-    @classmethod
-    def get_current_match_controller(cls, room: Room, game_instance) -> Optional["MatchController"]:
-        """获取房间当前的游戏局控制器
-        
-        Args:
-            room: Room - 房间对象
-            game_instance - 游戏实例
-            
-        Returns:
-            Optional[MatchController] - 当前游戏局控制器，如果没有则返回None
-        """
-        if not room.current_match_id:
-            return None
-            
-        current_match = None
-        for match in room.matches:
-            if match.id == room.current_match_id:
-                current_match = match
-                break
-                
-        if not current_match:
-            return None
-            
-        return cls(current_match, room, game_instance)
+        return cls(new_match)
     
     def start_match(self) -> bool:
         """开始游戏局
@@ -216,92 +181,93 @@ class MatchController:
         
         return True
     
-    def set_scenario(self, scenario_id: str) -> Tuple[bool, Optional[str]]:
-        """设置剧本
+    def set_scenario(self, scenario_id: str) -> bool:
+        """设置剧本ID
         
         Args:
             scenario_id: str - 剧本ID
             
         Returns:
-            Tuple[bool, Optional[str]] - (是否成功设置剧本, 错误消息)
+            bool - 是否成功设置剧本
         """
         # 检查游戏状态，如果已经开始则不能更换剧本
         if self.match.status == GameStatus.RUNNING:
-            error_msg = f"无法设置剧本: 游戏局已经开始"
-            logger.warning(f"{error_msg} ID={self.match.id}")
-            return False, error_msg
+            logger.warning(f"无法设置剧本: 游戏局已经开始 ID={self.match.id}")
+            return False
         
-        # 检查剧本是否存在
-        scenario_loader = ScenarioLoader()
-        scenario = scenario_loader.load_scenario(scenario_id)
-        
-        if not scenario:
-            error_msg = f"无法设置剧本: 剧本不存在 ID={scenario_id}"
-            logger.warning(error_msg)
-            return False, error_msg
-        
-        # 检查剧本是否适合当前房间人数
-        current_player_count = len(self.room.players)
-        room_max_players = getattr(self.room, 'max_players', 6)
-        
-        # 检查剧本最小玩家数限制
-        if current_player_count < scenario.min_players:
-            error_msg = f"当前房间人数({current_player_count})不足，该剧本至少需要{scenario.min_players}名玩家"
-            logger.warning(f"无法设置剧本: {error_msg}")
-            return False, error_msg
-        
-        # 检查剧本最大玩家数限制
-        if room_max_players > scenario.max_players:
-            error_msg = f"当前房间最大人数({room_max_players})超过剧本上限，该剧本最多支持{scenario.max_players}名玩家"
-            logger.warning(f"无法设置剧本: {error_msg}")
-            return False, error_msg
-            
-        # 设置剧本
+        # 设置剧本ID
         self.match.scenario_id = scenario_id
-        
-        # 加载角色模板到可选角色列表
-        self.match.available_characters = []
-        for template in scenario.character_templates:
-            self.match.available_characters.append({
-                "name": template.name,
-                "description": template.description,
-                "occupation": template.occupation,
-                "is_main": True,
-                "attributes": {}
-            })
-        
         logger.info(f"设置剧本: 游戏局ID={self.match.id}, 剧本ID={scenario_id}")
         
-        return True, None
+        return True
     
-    def load_available_characters(self) -> List[Dict[str, Any]]:
-        """加载可选角色列表
+    def set_available_characters(self, characters: List[Dict[str, Any]]) -> None:
+        """设置可选角色列表
         
-        Returns:
-            List[Dict[str, Any]] - 可选角色列表
+        Args:
+            characters: List[Dict[str, Any]] - 可选角色列表
         """
-        if not self.match.scenario_id:
-            return []
-            
-        # 加载剧本
-        scenario_loader = ScenarioLoader()
-        scenario = scenario_loader.load_scenario(self.match.scenario_id)
-        
-        if not scenario or not hasattr(scenario, 'characters'):
-            return []
-            
-        return scenario.characters
+        self.match.available_characters = characters
+        logger.info(f"设置可选角色列表: 游戏局ID={self.match.id}, 角色数量={len(characters)}")
     
-    def check_all_players_selected_character(self) -> Tuple[bool, List[str]]:
-        """检查所有玩家是否都已选择角色
+    def add_character(self, character: Character) -> None:
+        """添加角色到游戏局
         
-        Returns:
-            Tuple[bool, List[str]] - (是否所有玩家都已选择角色, 未选择角色的玩家名称列表)
+        Args:
+            character: Character - 角色实体
         """
-        players_without_characters = []
+        self.match.characters.append(character)
+        logger.info(f"添加角色到游戏局: 游戏局ID={self.match.id}, 角色ID={character.id}, 角色名称={character.name}")
+    
+    def remove_character(self, character_id: str) -> Optional[Character]:
+        """从游戏局中移除角色
         
-        for player in self.room.players:
-            if not player.character_id:
-                players_without_characters.append(player.name)
-                
-        return len(players_without_characters) == 0, players_without_characters
+        Args:
+            character_id: str - 角色ID
+            
+        Returns:
+            Optional[Character] - 被移除的角色，如果角色不存在则返回None
+        """
+        for i, character in enumerate(self.match.characters):
+            if character.id == character_id:
+                removed_character = self.match.characters.pop(i)
+                logger.info(f"从游戏局中移除角色: 游戏局ID={self.match.id}, 角色ID={character_id}")
+                return removed_character
+        return None
+    
+    def get_character(self, character_id: str) -> Optional[Character]:
+        """获取角色
+        
+        Args:
+            character_id: str - 角色ID
+            
+        Returns:
+            Optional[Character] - 角色实体，如果不存在则返回None
+        """
+        for character in self.match.characters:
+            if character.id == character_id:
+                return character
+        return None
+    
+    def get_character_by_player_id(self, player_id: str) -> Optional[Character]:
+        """根据玩家ID获取角色
+        
+        Args:
+            player_id: str - 玩家ID
+            
+        Returns:
+            Optional[Character] - 角色实体，如果不存在则返回None
+        """
+        for character in self.match.characters:
+            if character.player_id == player_id:
+                return character
+        return None
+    
+    def set_current_turn(self, turn_id: Optional[str]) -> None:
+        """设置当前回合ID
+        
+        Args:
+            turn_id: Optional[str] - 回合ID，如果为None则清除当前回合
+        """
+        self.match.current_turn_id = turn_id
+        logger.info(f"设置游戏局 {self.match.id} 的当前回合: {turn_id or '无'}")
