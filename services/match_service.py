@@ -6,6 +6,7 @@ from datetime import datetime
 from models.entities import Room, Match, Player, Character, GameStatus
 from core.controllers.match_controller import MatchController
 from core.controllers.character_controller import CharacterController
+from core.controllers.room_controller import RoomController
 from services.game_state_service import GameStateService
 from utils.scenario_loader import ScenarioLoader
 from core.rules import RuleEngine
@@ -443,7 +444,7 @@ class MatchService:
             return CharacterController(character)
         return None
     
-    async def get_match_controller(self, room_controller) -> Optional[MatchController]:
+    async def get_match_controller(self, room_controller:RoomController) -> Optional[MatchController]:
         """获取当前游戏局控制器
         
         Args:
