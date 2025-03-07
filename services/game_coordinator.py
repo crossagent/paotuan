@@ -14,8 +14,8 @@ from services.commands.factory import CommandFactory
 
 logger = logging.getLogger(__name__)
 
-class GameController:
-    """游戏控制器 - 负责系统协调、事件处理和适配器管理"""
+class GameCoordinator:
+    """游戏协调器 - 负责系统协调、事件处理和适配器管理"""
     
     def __init__(self, ai_service: AIService):
         self.game_state = GameState("main_game")
@@ -58,10 +58,10 @@ class GameController:
         self.adapters.append(adapter)
 
     async def start(self) -> None:
-        """启动控制器"""
-        # 检查控制器是否已经在运行
+        """启动协调器"""
+        # 检查协调器是否已经在运行
         if self.running:
-            logger.warning("控制器已经在运行")
+            logger.warning("协调器已经在运行")
             return
             
         # 启动Web状态检查器
@@ -77,11 +77,11 @@ class GameController:
         # 启动消息处理循环
         asyncio.create_task(self._message_loop())
         
-        logger.info("游戏控制器已启动")
+        logger.info("游戏协调器已启动")
 
     async def stop(self) -> None:
-        """停止控制器"""
-        # 如果控制器已经停止，直接返回
+        """停止协调器"""
+        # 如果协调器已经停止，直接返回
         if not self.running:
             return
             
@@ -94,7 +94,7 @@ class GameController:
         # 停止Web状态检查器
         await self.web_inspector.stop()
             
-        logger.info("游戏控制器已停止")
+        logger.info("游戏协调器已停止")
         
     async def _message_loop(self) -> None:
         """消息处理循环"""
