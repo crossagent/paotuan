@@ -96,7 +96,7 @@ def init_web_adapter(game_server):
     
     # 设置路由模块的引用
     game_routes.set_web_adapter(web_adapter)
-    room_routes.set_game_instance(game_instance)
+    room_routes.set_game_state(game_instance)
     
     logger.info("Web适配器已初始化")
     return web_adapter

@@ -28,26 +28,35 @@ class RoomInfo:
         self.has_active_match = room.current_match_id is not None
         self.settings = room.settings
 
-# 全局游戏实例引用
-game_instance = None
+# 全局服务引用
+game_state_service = None
+room_service = None
+event_bus = None
 
-# 设置游戏实例
-def set_game_instance(instance):
-    global game_instance
-    game_instance = instance
+# 设置游戏状态
+def set_game_state(game_state):
+    global game_state_service, room_service, event_bus
+    from services.game_state_service import GameStateService
+    from services.room_service import RoomService
+    from core.events import EventBus
+    
+    # 创建服务
+    event_bus = EventBus()
+    game_state_service = GameStateService(game_state, event_bus)
+    room_service = RoomService(game_state_service, event_bus)
 
 # 获取房间列表
 @router.get("/", response_model=List[Dict[str, Any]])
 async def list_rooms(current_user: User = Depends(get_current_user)):
     """获取房间列表"""
-    if not game_instance:
+    if not game_state_service:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="游戏服务器未启动"
         )
     
     rooms = []
-    for room_id, room in game_instance.rooms.items():
+    for room in game_state_service.list_rooms():
         room_info = RoomInfo(room)
         rooms.append({
             "id": room_info.id,
@@ -66,7 +75,7 @@ async def create_room(
     current_user: User = Depends(get_current_user)
 ):
     """创建新房间"""
-    if not game_instance:
+    if not game_state_service or not room_service:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="游戏服务器未启动"
@@ -89,20 +98,16 @@ async def create_room(
         )
     
     # 创建房间
-    room_id = str(uuid.uuid4())
-    room = GameRoom(id=room_id, name=room_name, max_players=max_players)
+    from core.controllers.room_controller import RoomController
     
-    # 添加到游戏实例
-    game_instance.rooms[room_id] = room
-    
-    # 创建房间管理器
-    from core.room import RoomManager
-    room_manager = RoomManager(room, game_instance)
+    # 使用RoomService创建房间
+    room_controller, messages = await room_service.create_room(room_name, current_user.id)
+    room = room_controller.room
     
     # 将创建者添加到房间
-    player = room_manager.add_player(current_user.id, current_user.username)
+    player, _ = await room_service.add_player_to_room(room_controller, current_user.id, current_user.username)
     
-    logger.info(f"创建房间: {room_name} (ID: {room_id}), 最大玩家数: {max_players}, 创建者: {current_user.username}")
+    logger.info(f"创建房间: {room_name} (ID: {room.id}), 最大玩家数: {max_players}, 创建者: {current_user.username}")
     
     return {
         "id": room.id,
@@ -120,28 +125,34 @@ async def get_room(
     current_user: User = Depends(get_current_user)
 ):
     """获取房间详情"""
-    if not game_instance:
+    if not game_state_service or not room_service:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="游戏服务器未启动"
         )
     
-    room = game_instance.rooms.get(room_id)
+    room = game_state_service.get_room(room_id)
     if not room:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="房间不存在"
         )
     
-    # 创建房间管理器
-    from core.room import RoomManager
-    room_manager = RoomManager(room, game_instance)
+    # 创建房间控制器
+    from core.controllers.room_controller import RoomController
+    room_controller = RoomController(room)
     
     # 获取当前游戏局
-    current_match = room_manager.get_current_match()
+    current_match = None
+    if room.current_match_id:
+        # 从游戏状态服务获取当前游戏局
+        for match in room.matches:
+            if match.id == room.current_match_id:
+                current_match = match
+                break
     
     # 获取房主
-    host = room_manager.get_host()
+    host = room_controller.get_host()
     
     # 构建玩家列表
     players = []
@@ -168,7 +179,7 @@ async def get_room(
         players.append(player_info)
     
     # 检查是否所有非房主玩家都已准备
-    all_ready = room_manager.are_all_players_ready()
+    all_ready = room_controller.are_all_players_ready()
     
     return {
         "id": room.id,
@@ -194,25 +205,25 @@ async def join_room(
     current_user: User = Depends(get_current_user)
 ):
     """加入房间"""
-    if not game_instance:
+    if not game_state_service or not room_service:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="游戏服务器未启动"
         )
     
-    room = game_instance.rooms.get(room_id)
+    room = game_state_service.get_room(room_id)
     if not room:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="房间不存在"
         )
     
-    # 创建房间管理器
-    from core.room import RoomManager
-    room_manager = RoomManager(room, game_instance)
+    # 创建房间控制器
+    from core.controllers.room_controller import RoomController
+    room_controller = RoomController(room)
     
     # 将玩家添加到房间
-    player = room_manager.add_player(current_user.id, current_user.username)
+    player, _ = await room_service.add_player_to_room(room_controller, current_user.id, current_user.username)
     
     logger.info(f"玩家加入房间: {current_user.username} (ID: {current_user.id}), 房间: {room.name} (ID: {room_id})")
     
@@ -232,25 +243,25 @@ async def leave_room(
     current_user: User = Depends(get_current_user)
 ):
     """离开房间"""
-    if not game_instance:
+    if not game_state_service or not room_service:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="游戏服务器未启动"
         )
     
-    room = game_instance.rooms.get(room_id)
+    room = game_state_service.get_room(room_id)
     if not room:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="房间不存在"
         )
     
-    # 创建房间管理器
-    from core.room import RoomManager
-    room_manager = RoomManager(room, game_instance)
+    # 创建房间控制器
+    from core.controllers.room_controller import RoomController
+    room_controller = RoomController(room)
     
     # 将玩家从房间中移除
-    success, event = room_manager.remove_player(current_user.id)
+    success, messages = await room_service.remove_player_from_room(room_controller, current_user.id)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -259,9 +270,7 @@ async def leave_room(
     
     logger.info(f"玩家离开房间: {current_user.username} (ID: {current_user.id}), 房间: {room.name} (ID: {room_id})")
     
-    # 如果返回了事件，发布到事件总线
-    if event and game_instance.event_bus:
-        await game_instance.event_bus.publish(event)
+    # 消息已经由room_service处理
     
     return {
         "success": True,
@@ -276,25 +285,25 @@ async def start_game(
     current_user: User = Depends(get_current_user)
 ):
     """开始游戏"""
-    if not game_instance:
+    if not game_state_service or not room_service:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="游戏服务器未启动"
         )
     
-    room = game_instance.rooms.get(room_id)
+    room = game_state_service.get_room(room_id)
     if not room:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="房间不存在"
         )
     
-    # 创建房间管理器
-    from core.room import RoomManager
-    room_manager = RoomManager(room, game_instance)
+    # 创建房间控制器
+    from core.controllers.room_controller import RoomController
+    room_controller = RoomController(room)
     
     # 检查是否是房主
-    host = room_manager.get_host()
+    host = room_controller.get_host()
     if not host or host.id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -302,14 +311,20 @@ async def start_game(
         )
     
     # 检查是否所有玩家都已准备
-    if not room_manager.are_all_players_ready() and len(room.players) > 1:
+    if not room_controller.are_all_players_ready() and len(room.players) > 1:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="还有玩家未准备，无法开始游戏"
         )
     
     # 检查是否有进行中的游戏
-    current_match = room_manager.get_current_match()
+    current_match = None
+    if room.current_match_id:
+        # 从游戏状态服务获取当前游戏局
+        for match in room.matches:
+            if match.id == room.current_match_id:
+                current_match = match
+                break
     if current_match and current_match.status == GameStatus.RUNNING:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -322,16 +337,25 @@ async def start_game(
     
     try:
         # 创建新游戏局
-        match = room_manager.create_match(scene)
+        from models.entities import Match
+        from datetime import datetime
+        
+        match_id = str(uuid.uuid4())
+        match = Match(id=match_id, room_id=room.id, scene=scene, created_at=datetime.now())
+        room.matches.append(match)
+        room.current_match_id = match_id
         
         # 如果指定了剧本，设置剧本
         if scenario_id:
-            success, error_msg = room_manager.set_scenario(scenario_id)
-            if not success:
+            from utils.scenario_loader import ScenarioLoader
+            scenario_loader = ScenarioLoader()
+            scenario = scenario_loader.load_scenario(scenario_id)
+            if not scenario:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=error_msg or f"设置剧本失败: {scenario_id}"
+                    detail=f"剧本不存在: {scenario_id}"
                 )
+            match.scenario_id = scenario_id
         
         # 更新游戏状态
         match.status = GameStatus.RUNNING
@@ -362,28 +386,28 @@ async def set_player_ready(
     current_user: User = Depends(get_current_user)
 ):
     """设置玩家准备状态"""
-    if not game_instance:
+    if not game_state_service or not room_service:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="游戏服务器未启动"
         )
     
-    room = game_instance.rooms.get(room_id)
+    room = game_state_service.get_room(room_id)
     if not room:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="房间不存在"
         )
     
-    # 创建房间管理器
-    from core.room import RoomManager
-    room_manager = RoomManager(room, game_instance)
+    # 创建房间控制器
+    from core.controllers.room_controller import RoomController
+    room_controller = RoomController(room)
     
     # 获取准备状态
     is_ready = ready_data.get("is_ready", True)
     
     # 检查是否是房主
-    host = room_manager.get_host()
+    host = room_controller.get_host()
     if host and host.id == current_user.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -391,7 +415,7 @@ async def set_player_ready(
         )
     
     # 设置准备状态
-    success = room_manager.set_player_ready(current_user.id, is_ready)
+    success, _ = await room_service.set_player_ready(room_controller, current_user.id, is_ready)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -399,7 +423,7 @@ async def set_player_ready(
         )
     
     # 检查是否所有玩家都已准备
-    all_ready = room_manager.are_all_players_ready()
+    all_ready = room_controller.are_all_players_ready()
     
     logger.info(f"玩家 {current_user.username} (ID: {current_user.id}) {'准备完毕' if is_ready else '取消准备'}")
     
@@ -417,22 +441,22 @@ async def select_character(
     current_user: User = Depends(get_current_user)
 ):
     """选择角色"""
-    if not game_instance:
+    if not game_state_service or not room_service:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="游戏服务器未启动"
         )
     
-    room = game_instance.rooms.get(room_id)
+    room = game_state_service.get_room(room_id)
     if not room:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="房间不存在"
         )
     
-    # 创建房间管理器
-    from core.room import RoomManager
-    room_manager = RoomManager(room, game_instance)
+    # 创建房间控制器
+    from core.controllers.room_controller import RoomController
+    room_controller = RoomController(room)
     
     # 获取角色名称
     character_name = character_data.get("character_name")
@@ -442,8 +466,30 @@ async def select_character(
             detail="角色名称不能为空"
         )
     
-    # 选择角色
-    success, message = room_manager.select_character(current_user.id, character_name)
+    # 获取当前游戏局
+    current_match = None
+    if room.current_match_id:
+        # 从游戏状态服务获取当前游戏局
+        for match in room.matches:
+            if match.id == room.current_match_id:
+                current_match = match
+                break
+    
+    if not current_match:
+        success, message = False, "没有进行中的游戏"
+    else:
+        # 查找或创建角色
+        character = next((c for c in current_match.characters if c.name == character_name), None)
+        if not character:
+            # 创建新角色
+            from models.entities import Character
+            character_id = str(uuid.uuid4())
+            character = Character(id=character_id, name=character_name, match_id=current_match.id)
+            current_match.characters.append(character)
+        
+        # 设置玩家角色
+        success, _ = await room_service.set_player_character(room_controller, current_user.id, character.id)
+        message = f"已选择角色: {character_name}" if success else "选择角色失败"
     if not success:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -466,25 +512,25 @@ async def set_scenario(
     current_user: User = Depends(get_current_user)
 ):
     """设置剧本"""
-    if not game_instance:
+    if not game_state_service or not room_service:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="游戏服务器未启动"
         )
     
-    room = game_instance.rooms.get(room_id)
+    room = game_state_service.get_room(room_id)
     if not room:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="房间不存在"
         )
     
-    # 创建房间管理器
-    from core.room import RoomManager
-    room_manager = RoomManager(room, game_instance)
+    # 创建房间控制器
+    from core.controllers.room_controller import RoomController
+    room_controller = RoomController(room)
     
     # 检查是否是房主
-    host = room_manager.get_host()
+    host = room_controller.get_host()
     if not host or host.id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -509,8 +555,21 @@ async def set_scenario(
             detail=f"剧本不存在: {scenario_id}"
         )
     
-    # 设置剧本
-    success, error_msg = room_manager.set_scenario(scenario_id)
+    # 获取当前游戏局
+    current_match = None
+    if room.current_match_id:
+        # 从游戏状态服务获取当前游戏局
+        for match in room.matches:
+            if match.id == room.current_match_id:
+                current_match = match
+                break
+    
+    if not current_match:
+        success, error_msg = False, "没有进行中的游戏"
+    else:
+        # 设置剧本
+        current_match.scenario_id = scenario_id
+        success, error_msg = True, None
     if not success:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -537,25 +596,25 @@ async def kick_player(
     current_user: User = Depends(get_current_user)
 ):
     """房主踢出玩家"""
-    if not game_instance:
+    if not game_state_service or not room_service:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="游戏服务器未启动"
         )
     
-    room = game_instance.rooms.get(room_id)
+    room = game_state_service.get_room(room_id)
     if not room:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="房间不存在"
         )
     
-    # 创建房间管理器
-    from core.room import RoomManager
-    room_manager = RoomManager(room, game_instance)
+    # 创建房间控制器
+    from core.controllers.room_controller import RoomController
+    room_controller = RoomController(room)
     
     # 检查是否是房主
-    host = room_manager.get_host()
+    host = room_controller.get_host()
     if not host or host.id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -570,7 +629,7 @@ async def kick_player(
         )
     
     # 踢出玩家
-    success, event = room_manager.kick_player(player_id)
+    success, _ = await room_service.kick_player(room_controller, current_user.id, player_id)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
