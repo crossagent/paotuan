@@ -417,6 +417,32 @@ class MatchService:
                 
         return True, f"成功选择角色: {character_name}", messages
     
+    async def is_match_running(self, match_controller: MatchController) -> bool:
+        """检查游戏局是否在运行中
+        
+        Args:
+            match_controller: MatchController - 游戏局控制器
+            
+        Returns:
+            bool - 是否在运行中
+        """
+        return match_controller.match.status == GameStatus.RUNNING
+    
+    async def get_character_controller_by_player_id(self, match_controller: MatchController, player_id: str) -> Optional[CharacterController]:
+        """根据玩家ID获取角色控制器
+        
+        Args:
+            match_controller: MatchController - 游戏局控制器
+            player_id: str - 玩家ID
+            
+        Returns:
+            Optional[CharacterController] - 角色控制器，如果不存在则返回None
+        """
+        character = match_controller.get_character_by_player_id(player_id)
+        if character:
+            return CharacterController(character)
+        return None
+    
     async def get_match_controller(self, room_controller) -> Optional[MatchController]:
         """获取当前游戏局控制器
         
