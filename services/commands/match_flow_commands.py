@@ -3,7 +3,6 @@ from typing import List, Dict, Any, Optional, Union
 
 from adapters.base import GameEvent, SetScenarioEvent, DMNarrationEvent
 from services.commands.base import GameCommand
-from services.game_service import GameService
 from services.room_service import RoomService
 from services.match_service import MatchService
 from services.turn_service import TurnService

@@ -6,7 +6,7 @@ from datetime import datetime
 from models.entities import Room, Match, Player, Character, GameStatus
 from core.controllers.room_controller import RoomController
 from core.controllers.character_controller import CharacterController
-from services.game_service import GameService
+from services.game_state_service import GameStateService
 from adapters.base import GameEvent, PlayerJoinedEvent, PlayerActionEvent, PlayerLeftEvent
 from core.events import EventBus
 
@@ -15,14 +15,14 @@ logger = logging.getLogger(__name__)
 class RoomService:
     """房间服务，协调房间相关的业务逻辑"""
     
-    def __init__(self, game_service: GameService, event_bus: Optional[EventBus] = None):
+    def __init__(self, game_state_service: GameStateService, event_bus: Optional[EventBus] = None):
         """初始化房间服务
         
         Args:
-            game_service: GameService - 游戏服务
+            game_state_service: GameStateService - 游戏状态服务
             event_bus: Optional[EventBus] - 事件总线
         """
-        self.game_service = game_service
+        self.game_state_service = game_state_service
         self.event_bus = event_bus
     
     async def create_room(self, name: str, host_id: Optional[str] = None) -> Tuple[RoomController, List[Dict[str, str]]]:
@@ -39,7 +39,7 @@ class RoomService:
         room_controller = RoomController.create_room(name, host_id)
         
         # 注册房间到游戏实例
-        self.game_service.register_room(room_controller.room.id, room_controller.room)
+        self.game_state_service.register_room(room_controller.room.id, room_controller.room)
         
         # 生成通知消息
         messages = []
@@ -66,7 +66,7 @@ class RoomService:
         player = room_controller.add_player(player_id, player_name)
         
         # 更新玩家-房间映射
-        self.game_service.update_player_room_mapping(player_id, room_controller.room.id)
+        self.game_state_service.update_player_room_mapping(player_id, room_controller.room.id)
         
         # 生成通知消息
         messages = []
@@ -116,11 +116,11 @@ class RoomService:
             return False, []
             
         # 更新玩家-房间映射
-        self.game_service.update_player_room_mapping(player_id, None)
+        self.game_state_service.update_player_room_mapping(player_id, None)
         
         # 如果玩家有角色，更新玩家-角色映射
         if removed_player.character_id:
-            self.game_service.update_player_character_mapping(player_id, None)
+            self.game_state_service.update_player_character_mapping(player_id, None)
             
         # 生成通知消息
         messages = []
@@ -133,7 +133,7 @@ class RoomService:
         # 检查房间是否为空
         if not room_controller.room.players:
             # 房间为空，可以关闭
-            self.game_service.unregister_room(room_controller.room.id)
+            self.game_state_service.unregister_room(room_controller.room.id)
             logger.info(f"房间已空，关闭房间: {room_controller.room.name} (ID: {room_controller.room.id})")
             
         # 发布玩家离开事件
@@ -234,11 +234,11 @@ class RoomService:
             return False, [{"recipient": host_id, "content": "踢出玩家失败"}]
             
         # 更新玩家-房间映射
-        self.game_service.update_player_room_mapping(player_id, None)
+        self.game_state_service.update_player_room_mapping(player_id, None)
         
         # 如果玩家有角色，更新玩家-角色映射
         if kicked_player.character_id:
-            self.game_service.update_player_character_mapping(player_id, None)
+            self.game_state_service.update_player_character_mapping(player_id, None)
             
         # 生成通知消息
         messages = []
@@ -282,7 +282,7 @@ class RoomService:
             return False, []
             
         # 更新玩家-角色映射
-        self.game_service.update_player_character_mapping(player_id, character_id)
+        self.game_state_service.update_player_character_mapping(player_id, character_id)
         
         # 获取玩家和角色信息，用于通知
         player = room_controller.get_player_by_id(player_id)
@@ -292,7 +292,7 @@ class RoomService:
         player_name = player.name
         
         # 获取角色信息
-        character = self.game_service.get_character_by_player_id(player_id)
+        character = self.game_state_service.get_character_by_player_id(player_id)
         character_name = character.name if character else "未知角色"
         
         # 生成通知消息
@@ -318,7 +318,7 @@ class RoomService:
         Returns:
             Optional[RoomController] - 房间控制器，如果不存在则返回None
         """
-        room = self.game_service.get_room(room_id)
+        room = self.game_state_service.get_room(room_id)
         if not room:
             return None
             
@@ -333,7 +333,7 @@ class RoomService:
         Returns:
             Optional[RoomController] - 房间控制器，如果不存在则返回None
         """
-        room = self.game_service.get_player_room(player_id)
+        room = self.game_state_service.get_player_room(player_id)
         if not room:
             return None
             
@@ -345,7 +345,7 @@ class RoomService:
         Returns:
             List[Dict[str, Any]] - 房间信息列表
         """
-        rooms = self.game_service.list_rooms()
+        rooms = self.game_state_service.list_rooms()
         room_info_list = []
         
         for room in rooms:

@@ -3,7 +3,6 @@ from typing import List, Dict, Any, Optional, Union
 
 from adapters.base import GameEvent, PlayerJoinedEvent, PlayerActionEvent, SelectCharacterEvent
 from services.commands.base import GameCommand
-from services.game_service import GameService
 from services.room_service import RoomService
 from services.match_service import MatchService
 from services.turn_service import TurnService
@@ -44,15 +43,12 @@ class PlayerJoinedCommand(GameCommand):
         
         # 如果有多个房间，返回房间列表让玩家选择
         if len(room_controllers) > 1:
-            # 获取游戏服务
-            game_service = self.service_provider.get_service(GameService)
-            
             rooms_msg = "当前有多个房间可用，请选择一个加入:\n"
             for room_controller in room_controllers:
                 room = room_controller.room
                 
-                # 获取房间状态
-                status = await game_service.get_room_status(room_controller)
+                # 获取房间状态 - 直接从房间控制器获取
+                status = room.status if hasattr(room, 'status') else "未知"
                 player_count = len(room_controller.get_players())
                 
                 rooms_msg += f"- {room.name} (ID: {room.id})\n"

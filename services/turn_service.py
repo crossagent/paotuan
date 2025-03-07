@@ -5,7 +5,7 @@ from models.entities import TurnType, DMTurn, ActionTurn, DiceTurn, TurnStatus, 
 from core.controllers.turn_controller import TurnController
 from core.controllers.match_controller import MatchController
 from core.controllers.character_controller import CharacterController
-from services.game_service import GameService
+from services.game_state_service import GameStateService
 from core.rules import RuleEngine
 from ai.chains.story_gen import StoryResponse
 from core.events import EventBus
@@ -15,15 +15,15 @@ logger = logging.getLogger(__name__)
 class TurnService:
     """回合服务，协调回合转换相关的业务逻辑"""
     
-    def __init__(self, game_service: GameService, rule_engine: RuleEngine = None, event_bus: EventBus = None):
+    def __init__(self, game_state_service: GameStateService, rule_engine: RuleEngine = None, event_bus: EventBus = None):
         """初始化回合服务
         
         Args:
-            game_service: GameService - 游戏服务
+            game_state_service: GameStateService - 游戏状态服务
             rule_engine: RuleEngine - 规则引擎
             event_bus: EventBus - 事件总线
         """
-        self.game_service = game_service
+        self.game_state_service = game_state_service
         self.rule_engine = rule_engine or RuleEngine()
         self.event_bus = event_bus
     

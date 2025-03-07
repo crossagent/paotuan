@@ -6,7 +6,7 @@ from datetime import datetime
 from models.entities import Room, Match, Player, Character, GameStatus
 from core.controllers.match_controller import MatchController
 from core.controllers.character_controller import CharacterController
-from services.game_service import GameService
+from services.game_state_service import GameStateService
 from utils.scenario_loader import ScenarioLoader
 from core.rules import RuleEngine
 from core.events import EventBus
@@ -16,18 +16,18 @@ logger = logging.getLogger(__name__)
 class MatchService:
     """游戏局服务，协调游戏局相关的业务逻辑"""
     
-    def __init__(self, game_service: GameService, 
+    def __init__(self, game_state_service: GameStateService, 
                 scenario_loader: ScenarioLoader = None, rule_engine: RuleEngine = None, 
                 event_bus: EventBus = None):
         """初始化游戏局服务
         
         Args:
-            game_service: GameService - 游戏服务
+            game_state_service: GameStateService - 游戏状态服务
             scenario_loader: ScenarioLoader - 剧本加载器
             rule_engine: RuleEngine - 规则引擎
             event_bus: EventBus - 事件总线
         """
-        self.game_service = game_service
+        self.game_state_service = game_state_service
         self.scenario_loader = scenario_loader or ScenarioLoader()
         self.rule_engine = rule_engine or RuleEngine()
         self.event_bus = event_bus
@@ -401,7 +401,7 @@ class MatchService:
         room_controller.set_player_character(player_id, character_id)
         
         # 更新玩家-角色映射
-        self.game_service.update_player_character_mapping(player_id, character_id)
+        self.game_state_service.update_player_character_mapping(player_id, character_id)
             
         # 生成通知消息
         messages = []

@@ -3,7 +3,6 @@ from typing import List, Dict, Any, Optional, Union
 
 from adapters.base import GameEvent, CreateRoomEvent, JoinRoomEvent, ListRoomsEvent
 from services.commands.base import GameCommand
-from services.game_service import GameService
 from services.room_service import RoomService
 
 logger = logging.getLogger(__name__)
@@ -98,16 +97,13 @@ class ListRoomsCommand(GameCommand):
         if not room_controllers:
             return [{"recipient": player_id, "content": "当前没有可用的房间，请使用 /创建房间 [房间名] 创建新房间"}]
         
-        # 获取游戏服务
-        game_service = self.service_provider.get_service(GameService)
-        
         # 构建房间列表消息
         rooms_msg = "可用房间列表:\n"
         for room_controller in room_controllers:
             room = room_controller.room
             
-            # 获取房间状态
-            status = await game_service.get_room_status(room_controller)
+            # 获取房间状态 - 直接从房间控制器获取
+            status = room.status if hasattr(room, 'status') else "未知"
             player_count = len(room_controller.get_players())
             
             rooms_msg += f"- {room.name} (ID: {room.id})\n"
