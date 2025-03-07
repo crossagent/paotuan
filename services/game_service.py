@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 
 from models.entities import Room, Match, Player, Character, GameStatus
-from core.game import GameInstance
+from core.game_state import GameState
 from core.events import EventBus
 
 logger = logging.getLogger(__name__)
@@ -12,28 +12,28 @@ logger = logging.getLogger(__name__)
 class GameService:
     """游戏服务，负责管理全局游戏状态和资源"""
     
-    def __init__(self, game_instance: GameInstance, event_bus: Optional[EventBus] = None):
+    def __init__(self, game_state: GameState, event_bus: Optional[EventBus] = None):
         """初始化游戏服务
         
         Args:
-            game_instance: GameInstance - 游戏实例
+            game_state: GameState - 游戏状态
             event_bus: Optional[EventBus] - 事件总线
         """
-        self.game_instance = game_instance
+        self.game_state = game_state
         self.event_bus = event_bus
         
     def register_room(self, room_id: str, room: Room) -> None:
-        """注册房间到游戏实例
+        """注册房间到游戏状态
         
         Args:
             room_id: str - 房间ID
             room: Room - 房间实体
         """
-        self.game_instance.rooms[room_id] = room
+        self.game_state.rooms[room_id] = room
         logger.info(f"注册房间: ID={room_id}, 名称={room.name}")
         
     def unregister_room(self, room_id: str) -> bool:
-        """从游戏实例中注销房间
+        """从游戏状态中注销房间
         
         Args:
             room_id: str - 房间ID
@@ -41,23 +41,23 @@ class GameService:
         Returns:
             bool - 是否成功注销
         """
-        if room_id in self.game_instance.rooms:
-            room = self.game_instance.rooms.pop(room_id)
+        if room_id in self.game_state.rooms:
+            room = self.game_state.rooms.pop(room_id)
             logger.info(f"注销房间: ID={room_id}, 名称={room.name}")
             
             # 清理相关映射
             players_to_remove = []
-            for player_id, mapped_room_id in self.game_instance.player_room_map.items():
+            for player_id, mapped_room_id in self.game_state.player_room_map.items():
                 if mapped_room_id == room_id:
                     players_to_remove.append(player_id)
                     
             for player_id in players_to_remove:
-                if player_id in self.game_instance.player_room_map:
-                    del self.game_instance.player_room_map[player_id]
+                if player_id in self.game_state.player_room_map:
+                    del self.game_state.player_room_map[player_id]
                     logger.info(f"清理玩家-房间映射: 玩家ID={player_id}")
                     
-                if player_id in self.game_instance.player_character_map:
-                    del self.game_instance.player_character_map[player_id]
+                if player_id in self.game_state.player_character_map:
+                    del self.game_state.player_character_map[player_id]
                     logger.info(f"清理玩家-角色映射: 玩家ID={player_id}")
                     
             return True
@@ -72,7 +72,7 @@ class GameService:
         Returns:
             Optional[Room] - 房间实体，如果不存在则返回None
         """
-        return self.game_instance.rooms.get(room_id)
+        return self.game_state.rooms.get(room_id)
         
     def list_rooms(self) -> List[Room]:
         """获取所有房间
@@ -80,7 +80,7 @@ class GameService:
         Returns:
             List[Room] - 所有房间列表
         """
-        return list(self.game_instance.rooms.values())
+        return list(self.game_state.rooms.values())
         
     def get_player_room(self, player_id: str) -> Optional[Room]:
         """获取玩家所在的房间
@@ -91,7 +91,7 @@ class GameService:
         Returns:
             Optional[Room] - 玩家所在的房间，如果不存在则返回None
         """
-        room_id = self.game_instance.player_room_map.get(player_id)
+        room_id = self.game_state.player_room_map.get(player_id)
         if room_id:
             return self.get_room(room_id)
         return None
@@ -104,11 +104,11 @@ class GameService:
             room_id: Optional[str] - 房间ID，如果为None则移除映射
         """
         if room_id is None:
-            if player_id in self.game_instance.player_room_map:
-                del self.game_instance.player_room_map[player_id]
+            if player_id in self.game_state.player_room_map:
+                del self.game_state.player_room_map[player_id]
                 logger.info(f"移除玩家-房间映射: 玩家ID={player_id}")
         else:
-            self.game_instance.player_room_map[player_id] = room_id
+            self.game_state.player_room_map[player_id] = room_id
             logger.info(f"更新玩家-房间映射: 玩家ID={player_id}, 房间ID={room_id}")
             
     def get_player_character(self, player_id: str) -> Optional[str]:
@@ -120,7 +120,7 @@ class GameService:
         Returns:
             Optional[str] - 角色ID，如果不存在则返回None
         """
-        return self.game_instance.player_character_map.get(player_id)
+        return self.game_state.player_character_map.get(player_id)
         
     def update_player_character_mapping(self, player_id: str, character_id: Optional[str]) -> None:
         """更新玩家-角色映射
@@ -130,11 +130,11 @@ class GameService:
             character_id: Optional[str] - 角色ID，如果为None则移除映射
         """
         if character_id is None:
-            if player_id in self.game_instance.player_character_map:
-                del self.game_instance.player_character_map[player_id]
+            if player_id in self.game_state.player_character_map:
+                del self.game_state.player_character_map[player_id]
                 logger.info(f"移除玩家-角色映射: 玩家ID={player_id}")
         else:
-            self.game_instance.player_character_map[player_id] = character_id
+            self.game_state.player_character_map[player_id] = character_id
             logger.info(f"更新玩家-角色映射: 玩家ID={player_id}, 角色ID={character_id}")
             
     def get_character_by_player_id(self, player_id: str) -> Optional[Character]:
@@ -183,5 +183,5 @@ class GameService:
         Returns:
             bool - 是否在房间中
         """
-        mapped_room_id = self.game_instance.player_room_map.get(player_id)
+        mapped_room_id = self.game_state.player_room_map.get(player_id)
         return mapped_room_id == room_id

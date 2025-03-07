@@ -1,9 +1,12 @@
+# 此文件已被 services/game_controller.py 替代，保留此文件仅用于向后兼容
+# 请使用 GameController 代替 GameServer
+
 import asyncio
 import logging
 from typing import List, Dict, Any, Union
 
 from models.entities import Room
-from core.game import GameInstance
+from core.game_state import GameState
 from core.rules import RuleEngine
 from core.events import EventBus, EventObserver
 from adapters.base import MessageAdapter, GameEvent
@@ -15,10 +18,10 @@ from services.commands.factory import CommandFactory
 logger = logging.getLogger(__name__)
 
 class GameServer:
-    """游戏服务器 - 使用命令模式和服务层模式重构"""
+    """游戏服务器 - 已被 GameController 替代，保留此类仅用于向后兼容"""
     
     def __init__(self, ai_service: AIService):
-        self.game_instance = GameInstance("main_game")
+        self.game_state = GameState("main_game")
         self.adapters: List[MessageAdapter] = []
         self.rule_engine = RuleEngine()
         self.event_bus = EventBus()
@@ -29,14 +32,14 @@ class GameServer:
         
         # 命令工厂 - 使用新的构造函数
         self.command_factory = CommandFactory(
-            self.game_instance, 
+            self.game_state, 
             self.event_bus,
             self.ai_service,
             self.rule_engine
         )
         
         # 初始化状态检查器
-        self.state_inspector = GameStateInspector(self.game_instance)
+        self.state_inspector = GameStateInspector(self.game_state)
         self.web_inspector = WebInspector(self.state_inspector)
     
     async def _handle_event(self, event: GameEvent) -> List[Union[GameEvent, Dict[str, str]]]:
