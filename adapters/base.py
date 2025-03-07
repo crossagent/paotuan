@@ -18,14 +18,26 @@ class PlayerJoinedEvent(GameEvent):
             }
         )
 
-class PlayerRequestStartEvent(GameEvent):
-    """DM决定开启游戏事件"""
+class StartMatchEvent(GameEvent):
+    """DM决定开启游戏局(match)事件"""
     def __init__(self, player_id: str, player_name: str):
         super().__init__(
             event_type="START_MATCH",
             data={
                 "player_id": player_id,
                 "player_name": player_name
+            }
+        )
+
+class EndMatchEvent(GameEvent):
+    """DM决定结束游戏局(match)事件"""
+    def __init__(self, player_id: str, player_name: str, result: str = "玩家手动结束"):
+        super().__init__(
+            event_type="END_MATCH",
+            data={
+                "player_id": player_id,
+                "player_name": player_name,
+                "result": result
             }
         )
 

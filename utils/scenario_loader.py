@@ -2,7 +2,7 @@ import os
 import json
 import logging
 from typing import List, Dict, Optional, Tuple, Any
-from models.scenario import Scenario, Scene, Puzzle, Character, Event
+from models.scenario import Scenario, Scene, Puzzle, Character, Event, CharacterTemplate
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +37,19 @@ class ScenarioLoader:
             with open(file_path, 'r', encoding='utf-8') as file:
                 data = json.load(file)
                 
+                # 检查剧本格式是否正确
+                if "玩家人数" not in data:
+                    logger.error(f"剧本格式错误: 缺少玩家人数设置")
+                    return None
+                
+                # 获取玩家人数限制
+                min_players = data.get("玩家人数", {}).get("最少")
+                max_players = data.get("玩家人数", {}).get("最多")
+                
+                if min_players is None or max_players is None:
+                    logger.error(f"剧本格式错误: 玩家人数设置不完整")
+                    return None
+                
                 # 处理场景数据
                 scenes = self._process_scenes_data(data.get("地图与谜题设置", []))
                 
@@ -46,12 +59,18 @@ class ScenarioLoader:
                 # 处理事件数据
                 events = self._process_events_data(data.get("事件脉络", []))
                 
+                # 处理角色模板数据
+                character_templates = self._process_character_templates(data.get("角色模板", []))
+                
                 # 创建场景对象
                 scenario = Scenario(
                     id=scenario_id,
                     name="疯人院",
                     victory_conditions=data.get("胜利条件", []),
-                    failure_conditions=data.get("失败条件", []),  # 从JSON获取失败条件
+                    failure_conditions=data.get("失败条件", []),
+                    min_players=min_players,
+                    max_players=max_players,
+                    character_templates=character_templates,
                     world_background=data.get("世界背景与主要场景", {}).get("世界背景", ""),
                     main_scene=data.get("世界背景与主要场景", {}).get("主要场景", ""),
                     scenes=scenes,
@@ -125,6 +144,26 @@ class ScenarioLoader:
                 ))
         
         return characters
+    
+    def _process_character_templates(self, templates_data: List[Dict[str, Any]]) -> List[CharacterTemplate]:
+        """处理角色模板数据
+        
+        Args:
+            templates_data: 原始角色模板数据
+            
+        Returns:
+            处理后的CharacterTemplate对象列表
+        """
+        templates = []
+        
+        for template_data in templates_data:
+            templates.append(CharacterTemplate(
+                name=template_data.get("姓名", ""),
+                occupation=template_data.get("职业", ""),
+                description=template_data.get("描述", "")
+            ))
+        
+        return templates
     
     def _process_events_data(self, events_data: List[Dict[str, Any]]) -> List[Event]:
         """处理事件数据

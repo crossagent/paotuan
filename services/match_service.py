@@ -1,0 +1,285 @@
+import logging
+from typing import List, Dict, Any, Optional, Union, Tuple
+import uuid
+from datetime import datetime
+
+from models.entities import Room, Match, Player, Character, GameStatus
+from core.match import MatchManager
+from utils.scenario_loader import ScenarioLoader
+from core.rules import RuleEngine
+
+logger = logging.getLogger(__name__)
+
+class MatchService:
+    """游戏局服务，处理游戏局相关的业务逻辑"""
+    
+    def __init__(self, scenario_loader: ScenarioLoader = None, rule_engine: RuleEngine = None, message_bus=None, repository=None):
+        """初始化游戏局服务
+        
+        Args:
+            scenario_loader: 剧本加载器
+            rule_engine: 规则引擎
+            message_bus: 消息总线，用于发布事件和消息
+            repository: 数据仓库，用于持久化操作
+        """
+        self.scenario_loader = scenario_loader or ScenarioLoader()
+        self.rule_engine = rule_engine or RuleEngine()
+        self.message_bus = message_bus
+        self.repository = repository
+    
+    async def create_match(self, room: Room, game_instance, name: str = "新的冒险") -> Tuple[MatchManager, List[Dict[str, str]]]:
+        """创建新的游戏局
+        
+        Args:
+            room: 房间对象
+            game_instance: 游戏实例
+            name: 游戏局名称
+            
+        Returns:
+            Tuple[MatchManager, List[Dict[str, str]]]: 创建的游戏局管理器和通知消息列表
+        """
+        # 检查是否有进行中的游戏局
+        current_match_manager = MatchManager.get_current_match_manager(room, game_instance)
+        if current_match_manager and current_match_manager.match.status == GameStatus.RUNNING:
+            error_msg = "当前已有进行中的游戏局，无法创建新游戏局"
+            logger.warning(error_msg)
+            return None, [{"recipient": room.host_id, "content": error_msg}]
+        
+        # 创建新游戏局
+        match_manager = MatchManager.create_match(room, game_instance, name)
+        
+        # 生成通知消息
+        messages = []
+        
+        # 通知房间中的所有玩家
+        create_message = f"创建了新的游戏局: {name}"
+        for player in room.players:
+            messages.append({"recipient": player.id, "content": create_message})
+        
+        # 如果提供了仓库，保存房间
+        if self.repository:
+            await self.repository.update_room(room)
+            
+        logger.info(f"创建新游戏局: {name} (ID: {match_manager.match.id})")
+        return match_manager, messages
+    
+    async def start_match(self, match_manager: MatchManager) -> Tuple[bool, List[Dict[str, str]]]:
+        """开始游戏局
+        
+        Args:
+            match_manager: 游戏局管理器
+            
+        Returns:
+            Tuple[bool, List[Dict[str, str]]]: (是否成功开始游戏局, 通知消息列表)
+        """
+        # 检查是否已设置剧本
+        if not match_manager.match.scenario_id:
+            error_msg = "无法开始游戏局: 未设置剧本"
+            logger.warning(error_msg)
+            return False, [{"recipient": match_manager.room.host_id, "content": error_msg}]
+        
+        # 检查所有玩家是否都已选择角色
+        all_selected, players_without_characters = match_manager.check_all_players_selected_character()
+        if not all_selected:
+            player_names = ", ".join(players_without_characters)
+            error_msg = f"无法开始游戏局: 以下玩家未选择角色: {player_names}"
+            logger.warning(error_msg)
+            return False, [{"recipient": match_manager.room.host_id, "content": error_msg}]
+        
+        # 使用MatchManager开始游戏局
+        success = match_manager.start_match()
+        
+        if not success:
+            error_msg = "开始游戏局失败"
+            logger.warning(error_msg)
+            return False, [{"recipient": match_manager.room.host_id, "content": error_msg}]
+        
+        # 生成通知消息
+        messages = []
+        
+        # 通知房间中的所有玩家
+        start_message = f"游戏开始！剧本: {match_manager.match.scenario_id}"
+        for player in match_manager.room.players:
+            messages.append({"recipient": player.id, "content": start_message})
+        
+        # 如果提供了仓库，更新房间
+        if self.repository:
+            await self.repository.update_room(match_manager.room)
+            
+        logger.info(f"游戏局开始: ID={match_manager.match.id}, 剧本={match_manager.match.scenario_id}")
+        return True, messages
+    
+    async def end_match(self, match_manager: MatchManager, result: Optional[str] = None) -> Tuple[bool, List[Dict[str, str]]]:
+        """结束游戏局
+        
+        Args:
+            match_manager: 游戏局管理器
+            result: 游戏结果
+            
+        Returns:
+            Tuple[bool, List[Dict[str, str]]]: (是否成功结束游戏局, 通知消息列表)
+        """
+        # 使用MatchManager结束游戏局
+        success = match_manager.end_match(result)
+        
+        if not success:
+            error_msg = "结束游戏局失败"
+            logger.warning(error_msg)
+            return False, [{"recipient": match_manager.room.host_id, "content": error_msg}]
+        
+        # 生成通知消息
+        messages = []
+        
+        # 通知房间中的所有玩家
+        end_message = f"游戏结束！" + (f"结果: {result}" if result else "")
+        for player in match_manager.room.players:
+            messages.append({"recipient": player.id, "content": end_message})
+        
+        # 如果提供了仓库，更新房间
+        if self.repository:
+            await self.repository.update_room(match_manager.room)
+            
+        logger.info(f"游戏局结束: ID={match_manager.match.id}, 结果={result or '未知'}")
+        return True, messages
+    
+    async def pause_match(self, match_manager: MatchManager) -> Tuple[bool, List[Dict[str, str]]]:
+        """暂停游戏局
+        
+        Args:
+            match_manager: 游戏局管理器
+            
+        Returns:
+            Tuple[bool, List[Dict[str, str]]]: (是否成功暂停游戏局, 通知消息列表)
+        """
+        # 使用MatchManager暂停游戏局
+        success = match_manager.pause_match()
+        
+        if not success:
+            error_msg = "暂停游戏局失败"
+            logger.warning(error_msg)
+            return False, [{"recipient": match_manager.room.host_id, "content": error_msg}]
+        
+        # 生成通知消息
+        messages = []
+        
+        # 通知房间中的所有玩家
+        pause_message = "游戏已暂停"
+        for player in match_manager.room.players:
+            messages.append({"recipient": player.id, "content": pause_message})
+        
+        # 如果提供了仓库，更新房间
+        if self.repository:
+            await self.repository.update_room(match_manager.room)
+            
+        logger.info(f"游戏局暂停: ID={match_manager.match.id}")
+        return True, messages
+    
+    async def resume_match(self, match_manager: MatchManager) -> Tuple[bool, List[Dict[str, str]]]:
+        """恢复游戏局
+        
+        Args:
+            match_manager: 游戏局管理器
+            
+        Returns:
+            Tuple[bool, List[Dict[str, str]]]: (是否成功恢复游戏局, 通知消息列表)
+        """
+        # 使用MatchManager恢复游戏局
+        success = match_manager.resume_match()
+        
+        if not success:
+            error_msg = "恢复游戏局失败"
+            logger.warning(error_msg)
+            return False, [{"recipient": match_manager.room.host_id, "content": error_msg}]
+        
+        # 生成通知消息
+        messages = []
+        
+        # 通知房间中的所有玩家
+        resume_message = "游戏已恢复"
+        for player in match_manager.room.players:
+            messages.append({"recipient": player.id, "content": resume_message})
+        
+        # 如果提供了仓库，更新房间
+        if self.repository:
+            await self.repository.update_room(match_manager.room)
+            
+        logger.info(f"游戏局恢复: ID={match_manager.match.id}")
+        return True, messages
+    
+    async def set_scenario(self, match_manager: MatchManager, scenario_id: str) -> Tuple[bool, Optional[str], List[Dict[str, str]]]:
+        """设置剧本
+        
+        Args:
+            match_manager: 游戏局管理器
+            scenario_id: 剧本ID
+            
+        Returns:
+            Tuple[bool, Optional[str], List[Dict[str, str]]]: (是否成功设置剧本, 错误消息, 通知消息列表)
+        """
+        # 检查剧本是否存在
+        scenario = self.scenario_loader.load_scenario(scenario_id)
+        if not scenario:
+            error_msg = f"剧本不存在: {scenario_id}"
+            logger.warning(error_msg)
+            return False, error_msg, [{"recipient": match_manager.room.host_id, "content": error_msg}]
+        
+        # 使用MatchManager设置剧本
+        success, error_msg = match_manager.set_scenario(scenario_id)
+        
+        if not success:
+            logger.warning(f"设置剧本失败: {error_msg}")
+            return False, error_msg, [{"recipient": match_manager.room.host_id, "content": error_msg}]
+        
+        # 生成通知消息
+        messages = []
+        
+        # 通知房间中的所有玩家
+        scenario_message = f"剧本已设置为: {scenario_id}"
+        for player in match_manager.room.players:
+            messages.append({"recipient": player.id, "content": scenario_message})
+        
+        # 加载可选角色列表
+        available_characters = match_manager.load_available_characters()
+        
+        # 通知玩家可选角色
+        if available_characters:
+            character_names = ", ".join([char.get("name", "未知") for char in available_characters])
+            character_message = f"可选角色: {character_names}"
+            for player in match_manager.room.players:
+                messages.append({"recipient": player.id, "content": character_message})
+        
+        # 如果提供了仓库，更新房间
+        if self.repository:
+            await self.repository.update_room(match_manager.room)
+            
+        logger.info(f"设置剧本: 游戏局ID={match_manager.match.id}, 剧本ID={scenario_id}")
+        return True, None, messages
+    
+    async def load_available_characters(self, match_manager: MatchManager) -> Tuple[List[Dict[str, Any]], List[Dict[str, str]]]:
+        """加载可选角色列表
+        
+        Args:
+            match_manager: 游戏局管理器
+            
+        Returns:
+            Tuple[List[Dict[str, Any]], List[Dict[str, str]]]: (可选角色列表, 通知消息列表)
+        """
+        # 使用MatchManager加载可选角色列表
+        available_characters = match_manager.load_available_characters()
+        
+        # 生成通知消息
+        messages = []
+        
+        # 通知玩家可选角色
+        if available_characters:
+            character_names = ", ".join([char.get("name", "未知") for char in available_characters])
+            character_message = f"可选角色: {character_names}"
+            for player in match_manager.room.players:
+                messages.append({"recipient": player.id, "content": character_message})
+        else:
+            error_msg = "无法加载可选角色列表"
+            for player in match_manager.room.players:
+                messages.append({"recipient": player.id, "content": error_msg})
+        
+        logger.info(f"加载可选角色列表: 游戏局ID={match_manager.match.id}, 角色数量={len(available_characters)}")
+        return available_characters, messages

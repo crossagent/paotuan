@@ -7,6 +7,7 @@ import asyncio
 from web.routes.user_routes import get_current_user
 from web.auth import User, auth_manager
 from adapters.web_adapter import WebAdapter
+from adapters.base import StartMatchEvent, EndMatchEvent
 
 # 创建路由器
 router = APIRouter(

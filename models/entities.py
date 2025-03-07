@@ -96,3 +96,4 @@ class Room(BaseModel):
     current_match_id: Optional[str] = None
     settings: Dict[str, Any] = {}
     host_id: Optional[str] = None  # 房主ID
+    max_players: int = 6  # 默认最大玩家数

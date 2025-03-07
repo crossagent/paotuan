@@ -16,47 +16,33 @@ class RoomManager:
         self.room = room
         self.game_instance = game_instance
         
-    def set_scenario(self, scenario_id: str) -> bool:
+    def set_scenario(self, scenario_id: str) -> Tuple[bool, Optional[str]]:
         """设置当前游戏使用的剧本
         
         Args:
             scenario_id: 剧本ID
             
         Returns:
-            是否设置成功
+            Tuple[bool, Optional[str]] - (是否设置成功, 错误消息)
         """
         # 获取当前游戏局
         current_match = self.get_current_match()
         if not current_match:
-            logger.warning("当前没有游戏局，无法设置剧本")
-            return False
-            
-        # 检查游戏状态，只允许在游戏开始前（WAITING状态）设置剧本
-        if current_match.status != GameStatus.WAITING:
-            logger.warning(f"无法设置剧本: 游戏已经开始，状态为 {current_match.status}")
-            return False
-            
-        # 加载剧本
-        from utils.scenario_loader import ScenarioLoader
-        scenario_loader = ScenarioLoader()
-        scenario = scenario_loader.load_scenario(scenario_id)
+            error_msg = "当前没有游戏局，无法设置剧本"
+            logger.warning(error_msg)
+            return False, error_msg
         
-        if not scenario:
-            logger.warning(f"剧本不存在: {scenario_id}")
-            return False
-            
-        # 更新当前游戏的场景和剧本ID
-        current_match.scenario_id = scenario_id
-        # 使用剧本的主要场景或第一个场景作为当前场景
-        if scenario.main_scene:
-            current_match.scene = scenario.main_scene
-        elif scenario.scenes and len(scenario.scenes) > 0:
-            current_match.scene = scenario.scenes[0].name
-        else:
-            current_match.scene = "未知场景"
+        # 使用MatchManager设置剧本
+        from core.match import MatchManager
+        match_manager = MatchManager(current_match, self.room, self.game_instance)
+        success, error_msg = match_manager.set_scenario(scenario_id)
         
-        logger.info(f"为房间 {self.room.name} 设置剧本: {scenario.name}")
-        return True
+        if not success:
+            logger.warning(f"设置剧本失败: {error_msg}")
+            return False, error_msg
+            
+        logger.info(f"为房间 {self.room.name} 设置剧本: {scenario_id}")
+        return True, None
         
     def add_player(self, player_id: str, player_name: str) -> Player:
         """添加玩家到房间"""

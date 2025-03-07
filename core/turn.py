@@ -150,9 +150,8 @@ class TurnManager:
                         break
                 
                 if character:
-                    # 根据难度和失败程度计算血量减少值
-                    # 失败时，血量减少值为难度的一半（向上取整）
-                    health_change = -((difficulty + 1) // 2)
+                    # 使用规则引擎计算失败伤害并应用
+                    health_change = rule_engine.calculate_failure_damage(difficulty)
                     rule_engine.apply_health_change(character, health_change)
                     logger.info(f"角色 {character.id} (玩家 {player_id}) 判定失败，生命值变化: {health_change}，当前生命值: {character.health}")
             

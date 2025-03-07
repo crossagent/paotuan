@@ -4,7 +4,7 @@ import json
 from typing import Optional, Dict, Any, List, Callable, Set
 import uuid
 
-from adapters.base import MessageAdapter, GameEvent, PlayerJoinedEvent, PlayerActionEvent, PlayerRequestStartEvent, SetScenarioEvent, CreateRoomEvent, JoinRoomEvent, ListRoomsEvent, SelectCharacterEvent
+from adapters.base import MessageAdapter, GameEvent, PlayerJoinedEvent, PlayerActionEvent, StartMatchEvent, EndMatchEvent, SetScenarioEvent, CreateRoomEvent, JoinRoomEvent, ListRoomsEvent, SelectCharacterEvent
 from adapters.command_handler import CommandHandler
 
 logger = logging.getLogger(__name__)

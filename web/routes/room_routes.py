@@ -73,10 +73,24 @@ async def create_room(
         )
     
     room_name = room_data.get("name", f"{current_user.username}的房间")
+    max_players = room_data.get("max_players", 6)  # 获取最大玩家数，默认为6
+    
+    # 验证最大玩家数
+    if max_players < 2:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="房间最大玩家数不能小于2"
+        )
+    
+    if max_players > 10:  # 设置一个上限
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="房间最大玩家数不能超过10"
+        )
     
     # 创建房间
     room_id = str(uuid.uuid4())
-    room = GameRoom(id=room_id, name=room_name)
+    room = GameRoom(id=room_id, name=room_name, max_players=max_players)
     
     # 添加到游戏实例
     game_instance.rooms[room_id] = room
@@ -88,13 +102,14 @@ async def create_room(
     # 将创建者添加到房间
     player = room_manager.add_player(current_user.id, current_user.username)
     
-    logger.info(f"创建房间: {room_name} (ID: {room_id}), 创建者: {current_user.username}")
+    logger.info(f"创建房间: {room_name} (ID: {room_id}), 最大玩家数: {max_players}, 创建者: {current_user.username}")
     
     return {
         "id": room.id,
         "name": room.name,
         "created_at": room.created_at,
         "player_count": len(room.players),
+        "max_players": room.max_players,
         "has_active_match": room.current_match_id is not None
     }
 
@@ -311,11 +326,11 @@ async def start_game(
         
         # 如果指定了剧本，设置剧本
         if scenario_id:
-            success = room_manager.set_scenario(scenario_id)
+            success, error_msg = room_manager.set_scenario(scenario_id)
             if not success:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"设置剧本失败: {scenario_id}"
+                    detail=error_msg or f"设置剧本失败: {scenario_id}"
                 )
         
         # 更新游戏状态
@@ -495,11 +510,11 @@ async def set_scenario(
         )
     
     # 设置剧本
-    success = room_manager.set_scenario(scenario_id)
+    success, error_msg = room_manager.set_scenario(scenario_id)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="设置剧本失败，游戏可能已经开始"
+            detail=error_msg or "设置剧本失败"
         )
     
     logger.info(f"房主 {current_user.username} (ID: {current_user.id}) 设置了剧本: {scenario_id}")

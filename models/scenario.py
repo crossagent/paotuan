@@ -1,6 +1,12 @@
 from typing import List, Dict, Any, Optional, Literal
 from pydantic import BaseModel, Field
 
+class CharacterTemplate(BaseModel):
+    """角色模板模型"""
+    name: str = Field(..., description="角色名称")
+    occupation: str = Field(..., description="角色职业")
+    description: str = Field("", description="角色描述")
+
 class Puzzle(BaseModel):
     """谜题模型"""
     name: str = Field(..., description="谜题名称")
@@ -36,6 +42,9 @@ class Scenario(BaseModel):
     name: str = Field(default="疯人院", description="剧本名称")
     victory_conditions: List[str] = Field(default_factory=list, description="胜利条件")
     failure_conditions: List[str] = Field(default_factory=list, description="失败条件")
+    min_players: int = Field(default=1, description="最少所需玩家数")
+    max_players: int = Field(default=4, description="最多支持玩家数")
+    character_templates: List[CharacterTemplate] = Field(default_factory=list, description="角色模板列表")
     game_over: bool = Field(default=False, description="游戏是否结束")
     game_result: Optional[Literal["victory", "failure"]] = Field(None, description="游戏结果")
     world_background: str = Field(default="", description="世界背景")

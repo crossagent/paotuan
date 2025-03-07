@@ -7,7 +7,7 @@ from core.rules import RuleEngine
 from services.commands.base import GameCommand
 from services.commands.room_commands import CreateRoomCommand, JoinRoomCommand, ListRoomsCommand
 from services.commands.player_commands import PlayerJoinedCommand, SelectCharacterCommand, PlayerLeftCommand
-from services.commands.game_commands import StartGameCommand, SetScenarioCommand, DMNarrationCommand, CharacterActionCommand
+from services.commands.game_commands import StartMatchCommand, EndMatchCommand, SetScenarioCommand, DMNarrationCommand, CharacterActionCommand
 
 logger = logging.getLogger(__name__)
 
@@ -36,8 +36,11 @@ class CommandFactory:
         
         # 游戏相关命令
         elif event_type == "START_MATCH":
-            return StartGameCommand(self.game_instance, self.event_bus, 
+            return StartMatchCommand(self.game_instance, self.event_bus, 
                                    self.ai_service, self.rule_engine)
+        elif event_type == "END_MATCH":
+            return EndMatchCommand(self.game_instance, self.event_bus, 
+                                  self.ai_service, self.rule_engine)
         elif event_type == "SET_SCENARIO":
             return SetScenarioCommand(self.game_instance, self.event_bus, 
                                      self.ai_service, self.rule_engine)

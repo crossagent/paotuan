@@ -6,7 +6,7 @@ from typing import Optional, Dict, Any, List, Callable
 from dingtalk_stream import DingTalkStreamClient, Credential, ChatbotMessage, AckMessage
 from dingtalk_stream.frames import Headers
 from dingtalk_stream.chatbot import ChatbotHandler
-from adapters.base import MessageAdapter, GameEvent, PlayerJoinedEvent, PlayerActionEvent, PlayerRequestStartEvent, SetScenarioEvent, CreateRoomEvent, JoinRoomEvent, ListRoomsEvent, SelectCharacterEvent
+from adapters.base import MessageAdapter, GameEvent, PlayerJoinedEvent, PlayerActionEvent, StartMatchEvent, EndMatchEvent, SetScenarioEvent, CreateRoomEvent, JoinRoomEvent, ListRoomsEvent, SelectCharacterEvent
 from adapters.command_handler import CommandHandler
 
 logger = logging.getLogger(__name__)

@@ -23,6 +23,18 @@ class RuleEngine:
         success = self.check_success(roll, difficulty)
         return success, roll
     
+    def calculate_failure_damage(self, difficulty: int) -> int:
+        """计算判定失败时的伤害值
+        
+        Args:
+            difficulty (int): 判定难度
+            
+        Returns:
+            int: 应扣除的生命值（负数）
+        """
+        # 失败时，血量减少值为难度的一半（向上取整）
+        return -((difficulty + 1) // 2)
+    
     def apply_health_change(self, character: Character, change: int) -> None:
         """应用生命值变化"""
         character.health += change
