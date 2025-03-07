@@ -1,41 +1,60 @@
 # 导出基类
-from services.commands.base import GameCommand
+from services.commands.base import GameCommand, ServiceProvider
 
-# 导出房间相关命令
-from services.commands.room_commands import (
+# 导出房间管理命令
+from services.commands.room_management_commands import (
     CreateRoomCommand,
     JoinRoomCommand,
-    ListRoomsCommand
+    ListRoomsCommand,
+    LeaveRoomCommand
 )
 
-# 导出玩家相关命令
-from services.commands.player_commands import (
+# 导出玩家操作命令
+from services.commands.player_actions_commands import (
     PlayerJoinedCommand,
-    PlayerActionCommand,
+    CharacterActionCommand,
     SelectCharacterCommand
 )
 
-# 导出游戏相关命令
-from services.commands.game_commands import (
-    StartGameCommand,
+# 导出游戏流程命令
+from services.commands.match_flow_commands import (
+    StartMatchCommand,
+    EndMatchCommand,
     SetScenarioCommand,
+    PauseMatchCommand,
+    ResumeMatchCommand
+)
+
+# 导出DM操作命令
+from services.commands.dm_operations_commands import (
     DMNarrationCommand
 )
 
 # 导出命令工厂
-from services.commands.factory import CommandFactory
+from services.commands.factory import CommandFactory, CommandServiceProvider
 
-# 为了向后兼容，导出所有命令类
+# 导出所有命令类
 __all__ = [
     'GameCommand',
+    'ServiceProvider',
+    # 房间管理命令
     'CreateRoomCommand',
     'JoinRoomCommand',
     'ListRoomsCommand',
+    'LeaveRoomCommand',
+    # 玩家操作命令
     'PlayerJoinedCommand',
-    'PlayerActionCommand',
+    'CharacterActionCommand',
     'SelectCharacterCommand',
-    'StartGameCommand',
+    # 游戏流程命令
+    'StartMatchCommand',
+    'EndMatchCommand',
     'SetScenarioCommand',
+    'PauseMatchCommand',
+    'ResumeMatchCommand',
+    # DM操作命令
     'DMNarrationCommand',
-    'CommandFactory'
+    # 工厂
+    'CommandFactory',
+    'CommandServiceProvider'
 ]

@@ -5,9 +5,10 @@ from core.game_state import GameState
 from core.events import EventBus
 from core.rules import RuleEngine
 from services.commands.base import GameCommand, ServiceProvider
-from services.commands.room_commands import CreateRoomCommand, JoinRoomCommand, ListRoomsCommand
-from services.commands.player_commands import PlayerJoinedCommand, SelectCharacterCommand, PlayerLeftCommand
-from services.commands.game_commands import StartMatchCommand, EndMatchCommand, SetScenarioCommand, DMNarrationCommand, CharacterActionCommand
+from services.commands.room_management_commands import CreateRoomCommand, JoinRoomCommand, ListRoomsCommand, LeaveRoomCommand
+from services.commands.player_actions_commands import PlayerJoinedCommand, SelectCharacterCommand, CharacterActionCommand
+from services.commands.match_flow_commands import StartMatchCommand, EndMatchCommand, SetScenarioCommand, PauseMatchCommand, ResumeMatchCommand
+from services.commands.dm_operations_commands import DMNarrationCommand
 from services.game_state_service import GameStateService
 from services.room_service import RoomService
 from services.match_service import MatchService
@@ -95,32 +96,38 @@ class CommandFactory:
         Raises:
             ValueError: 当事件类型未知时抛出
         """
-        # 玩家相关命令
-        if event_type == "PLAYER_JOINED":
-            return PlayerJoinedCommand(self.service_provider)
-        elif event_type == "PLAYER_ACTION":
-            return CharacterActionCommand(self.service_provider)
-        elif event_type == "SELECT_CHARACTER":
-            return SelectCharacterCommand(self.service_provider)
-        
-        # 游戏相关命令
-        elif event_type == "START_MATCH":
-            return StartMatchCommand(self.service_provider)
-        elif event_type == "END_MATCH":
-            return EndMatchCommand(self.service_provider)
-        elif event_type == "SET_SCENARIO":
-            return SetScenarioCommand(self.service_provider)
-        elif event_type == "DM_NARRATION":
-            return DMNarrationCommand(self.service_provider)
-        
-        # 房间相关命令
-        elif event_type == "CREATE_ROOM":
+        # 房间管理命令
+        if event_type == "CREATE_ROOM":
             return CreateRoomCommand(self.service_provider)
         elif event_type == "JOIN_ROOM":
             return JoinRoomCommand(self.service_provider)
         elif event_type == "LIST_ROOMS":
             return ListRoomsCommand(self.service_provider)
         elif event_type == "PLAYER_LEFT":
-            return PlayerLeftCommand(self.service_provider)
+            return LeaveRoomCommand(self.service_provider)
+        
+        # 玩家操作命令
+        elif event_type == "PLAYER_JOINED":
+            return PlayerJoinedCommand(self.service_provider)
+        elif event_type == "PLAYER_ACTION":
+            return CharacterActionCommand(self.service_provider)
+        elif event_type == "SELECT_CHARACTER":
+            return SelectCharacterCommand(self.service_provider)
+        
+        # 游戏流程命令
+        elif event_type == "START_MATCH":
+            return StartMatchCommand(self.service_provider)
+        elif event_type == "END_MATCH":
+            return EndMatchCommand(self.service_provider)
+        elif event_type == "SET_SCENARIO":
+            return SetScenarioCommand(self.service_provider)
+        elif event_type == "PAUSE_MATCH":
+            return PauseMatchCommand(self.service_provider)
+        elif event_type == "RESUME_MATCH":
+            return ResumeMatchCommand(self.service_provider)
+        
+        # DM操作命令
+        elif event_type == "DM_NARRATION":
+            return DMNarrationCommand(self.service_provider)
         else:
             raise ValueError(f"未知事件类型: {event_type}")
