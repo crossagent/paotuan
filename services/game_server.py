@@ -10,7 +10,7 @@ from adapters.base import MessageAdapter, GameEvent
 from services.ai_service import AIService
 from utils.inspector import GameStateInspector
 from utils.web_inspector import WebInspector
-from services.commands import CommandFactory
+from services.commands.factory import CommandFactory
 
 logger = logging.getLogger(__name__)
 
