@@ -22,6 +22,66 @@ class MatchManager:
         self.match = match
         self.room = room
         self.game_instance = game_instance
+        
+    def dump_state(self) -> Dict[str, Any]:
+        """返回当前状态供Inspector使用
+        
+        Returns:
+            Dict[str, Any]: 游戏局状态
+        """
+        characters = []
+        for character in self.match.characters:
+            characters.append({
+                "id": character.id,
+                "name": character.name,
+                "player_id": character.player_id,
+                "health": character.health,
+                "max_health": character.max_health,
+                "attributes": character.attributes
+            })
+            
+        turns = []
+        for turn in self.match.turns:
+            turn_info = {
+                "id": turn.id,
+                "turn_type": turn.turn_type,
+                "status": turn.status,
+                "created_at": turn.created_at.isoformat() if turn.created_at else None,
+                "completed_at": turn.completed_at.isoformat() if turn.completed_at else None
+            }
+            
+            # 添加回合类型特有的信息
+            if hasattr(turn, 'active_players'):
+                turn_info["active_players"] = turn.active_players
+                
+            if hasattr(turn, 'actions'):
+                turn_info["actions"] = turn.actions
+                
+            if hasattr(turn, 'dice_results'):
+                turn_info["dice_results"] = turn.dice_results
+                
+            if hasattr(turn, 'narration'):
+                turn_info["narration"] = turn.narration
+                
+            if hasattr(turn, 'difficulty'):
+                turn_info["difficulty"] = turn.difficulty
+                
+            if hasattr(turn, 'action_desc'):
+                turn_info["action_desc"] = turn.action_desc
+                
+            turns.append(turn_info)
+            
+        return {
+            "id": self.match.id,
+            "scene": self.match.scene,
+            "status": self.match.status,
+            "scenario_id": self.match.scenario_id,
+            "characters": characters,
+            "turns": turns,
+            "current_turn_id": self.match.current_turn_id,
+            "created_at": self.match.created_at.isoformat() if self.match.created_at else None,
+            "game_state": self.match.game_state
+        }
     
     @classmethod
     def create_match(cls, room: Room, game_instance, name: str = "新的冒险") -> "MatchManager":

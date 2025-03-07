@@ -6,21 +6,20 @@ from datetime import datetime
 from models.entities import Room, Match, Player, Character, GameStatus
 from core.room import RoomManager
 from adapters.base import GameEvent, PlayerJoinedEvent, PlayerActionEvent, PlayerLeftEvent
+from core.events import EventBus
 
 logger = logging.getLogger(__name__)
 
 class RoomService:
     """房间服务，处理房间相关的业务逻辑"""
     
-    def __init__(self, message_bus=None, repository=None):
+    def __init__(self, event_bus: EventBus = None):
         """初始化房间服务
         
         Args:
-            message_bus: 消息总线，用于发布事件和消息
-            repository: 数据仓库，用于持久化操作
+            event_bus: 事件总线，用于发布事件和消息
         """
-        self.message_bus = message_bus
-        self.repository = repository
+        self.event_bus = event_bus
     
     async def create_room(self, name: str, host_id: str = None, game_instance=None) -> Tuple[Room, RoomManager]:
         """创建新房间
@@ -39,9 +38,7 @@ class RoomService:
         # 创建房间管理器
         room_manager = RoomManager(new_room, game_instance)
         
-        # 如果提供了仓库，保存房间
-        if self.repository:
-            await self.repository.save_room(new_room)
+        # 房间创建完成
             
         logger.info(f"创建新房间: {name} (ID: {room_id})")
         return new_room, room_manager
@@ -73,17 +70,13 @@ class RoomService:
         messages.append({"recipient": player_id, "content": welcome_message})
         
         # 发布玩家加入事件
-        if self.message_bus:
+        if self.event_bus:
             event = PlayerJoinedEvent(
                 player_id=player_id,
                 player_name=player_name,
                 room_id=room_manager.room.id
             )
-            await self.message_bus.publish(event)
-            
-        # 如果提供了仓库，更新房间
-        if self.repository:
-            await self.repository.update_room(room_manager.room)
+            await self.event_bus.publish(event)
             
         logger.info(f"玩家 {player_name} (ID: {player_id}) 加入房间 {room_manager.room.name} (ID: {room_manager.room.id})")
         return player, messages
@@ -114,12 +107,8 @@ class RoomService:
             messages.extend(room_messages)
             
         # 发布玩家离开事件
-        if self.message_bus and event:
-            await self.message_bus.publish(event)
-            
-        # 如果提供了仓库，更新房间
-        if self.repository:
-            await self.repository.update_room(room_manager.room)
+        if self.event_bus and event:
+            await self.event_bus.publish(event)
             
         logger.info(f"玩家 {event.player_name if event else player_id} 离开房间 {room_manager.room.name} (ID: {room_manager.room.id})")
         return True, event, messages
@@ -176,9 +165,7 @@ class RoomService:
         room_messages = self.broadcast_to_room(room_manager, status_message)
         messages.extend(room_messages)
         
-        # 如果提供了仓库，更新房间
-        if self.repository:
-            await self.repository.update_room(room_manager.room)
+        # 玩家准备状态已更新
             
         logger.info(f"玩家 {player_name} (ID: {player_id}) {'准备完毕' if is_ready else '取消准备'}")
         return True, messages
@@ -218,12 +205,8 @@ class RoomService:
             messages.append({"recipient": player_id, "content": "你被房主踢出了房间"})
             
         # 发布玩家离开事件
-        if self.message_bus and event:
-            await self.message_bus.publish(event)
-            
-        # 如果提供了仓库，更新房间
-        if self.repository:
-            await self.repository.update_room(room_manager.room)
+        if self.event_bus and event:
+            await self.event_bus.publish(event)
             
         logger.info(f"玩家 {event.player_name if event else player_id} 被房主踢出房间 {room_manager.room.name} (ID: {room_manager.room.id})")
         return True, messages
@@ -260,10 +243,6 @@ class RoomService:
             select_message = f"玩家 {player_name} 选择了角色 {character_name}"
             room_messages = self.broadcast_to_room(room_manager, select_message, [player_id])
             messages.extend(room_messages)
-            
-            # 如果提供了仓库，更新房间
-            if self.repository:
-                await self.repository.update_room(room_manager.room)
                 
             logger.info(f"玩家 {player_name} (ID: {player_id}) 选择了角色 {character_name}")
             
@@ -290,10 +269,6 @@ class RoomService:
             scenario_message = f"房间剧本已设置为: {scenario_id}"
             room_messages = self.broadcast_to_room(room_manager, scenario_message)
             messages.extend(room_messages)
-            
-            # 如果提供了仓库，更新房间
-            if self.repository:
-                await self.repository.update_room(room_manager.room)
                 
             logger.info(f"为房间 {room_manager.room.name} (ID: {room_manager.room.id}) 设置剧本: {scenario_id}")
         else:

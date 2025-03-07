@@ -11,8 +11,15 @@ logger = logging.getLogger(__name__)
 class TurnService:
     """回合服务，处理回合转换相关的业务逻辑"""
     
-    def __init__(self, rule_engine: RuleEngine):
-        self.rule_engine = rule_engine
+    def __init__(self, rule_engine: RuleEngine = None, event_bus = None):
+        """初始化回合服务
+        
+        Args:
+            rule_engine: 规则引擎
+            event_bus: 事件总线，用于发布事件和消息
+        """
+        self.rule_engine = rule_engine or RuleEngine()
+        self.event_bus = event_bus
     
     def can_start_turn(self, turn_type: TurnType, match: Match, active_players: List[str] = None) -> Tuple[bool, str]:
         """验证是否可以开始某类回合

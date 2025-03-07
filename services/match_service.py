@@ -13,19 +13,17 @@ logger = logging.getLogger(__name__)
 class MatchService:
     """游戏局服务，处理游戏局相关的业务逻辑"""
     
-    def __init__(self, scenario_loader: ScenarioLoader = None, rule_engine: RuleEngine = None, message_bus=None, repository=None):
+    def __init__(self, scenario_loader: ScenarioLoader = None, rule_engine: RuleEngine = None, event_bus=None):
         """初始化游戏局服务
         
         Args:
             scenario_loader: 剧本加载器
             rule_engine: 规则引擎
-            message_bus: 消息总线，用于发布事件和消息
-            repository: 数据仓库，用于持久化操作
+            event_bus: 事件总线，用于发布事件和消息
         """
         self.scenario_loader = scenario_loader or ScenarioLoader()
         self.rule_engine = rule_engine or RuleEngine()
-        self.message_bus = message_bus
-        self.repository = repository
+        self.event_bus = event_bus
     
     async def create_match(self, room: Room, game_instance, name: str = "新的冒险") -> Tuple[MatchManager, List[Dict[str, str]]]:
         """创建新的游戏局
@@ -56,9 +54,7 @@ class MatchService:
         for player in room.players:
             messages.append({"recipient": player.id, "content": create_message})
         
-        # 如果提供了仓库，保存房间
-        if self.repository:
-            await self.repository.update_room(room)
+        # 游戏局创建完成
             
         logger.info(f"创建新游戏局: {name} (ID: {match_manager.match.id})")
         return match_manager, messages
@@ -102,9 +98,7 @@ class MatchService:
         for player in match_manager.room.players:
             messages.append({"recipient": player.id, "content": start_message})
         
-        # 如果提供了仓库，更新房间
-        if self.repository:
-            await self.repository.update_room(match_manager.room)
+        # 游戏局开始
             
         logger.info(f"游戏局开始: ID={match_manager.match.id}, 剧本={match_manager.match.scenario_id}")
         return True, messages
@@ -135,9 +129,7 @@ class MatchService:
         for player in match_manager.room.players:
             messages.append({"recipient": player.id, "content": end_message})
         
-        # 如果提供了仓库，更新房间
-        if self.repository:
-            await self.repository.update_room(match_manager.room)
+        # 游戏局结束
             
         logger.info(f"游戏局结束: ID={match_manager.match.id}, 结果={result or '未知'}")
         return True, messages
@@ -167,9 +159,7 @@ class MatchService:
         for player in match_manager.room.players:
             messages.append({"recipient": player.id, "content": pause_message})
         
-        # 如果提供了仓库，更新房间
-        if self.repository:
-            await self.repository.update_room(match_manager.room)
+        # 游戏局暂停
             
         logger.info(f"游戏局暂停: ID={match_manager.match.id}")
         return True, messages
@@ -199,9 +189,7 @@ class MatchService:
         for player in match_manager.room.players:
             messages.append({"recipient": player.id, "content": resume_message})
         
-        # 如果提供了仓库，更新房间
-        if self.repository:
-            await self.repository.update_room(match_manager.room)
+        # 游戏局恢复
             
         logger.info(f"游戏局恢复: ID={match_manager.match.id}")
         return True, messages
@@ -248,9 +236,7 @@ class MatchService:
             for player in match_manager.room.players:
                 messages.append({"recipient": player.id, "content": character_message})
         
-        # 如果提供了仓库，更新房间
-        if self.repository:
-            await self.repository.update_room(match_manager.room)
+        # 剧本设置成功
             
         logger.info(f"设置剧本: 游戏局ID={match_manager.match.id}, 剧本ID={scenario_id}")
         return True, None, messages

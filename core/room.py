@@ -16,6 +16,41 @@ class RoomManager:
         self.room = room
         self.game_instance = game_instance
         
+    def dump_state(self) -> Dict[str, Any]:
+        """返回当前状态供Inspector使用
+        
+        Returns:
+            Dict[str, Any]: 房间状态
+        """
+        players = []
+        for player in self.room.players:
+            players.append({
+                "id": player.id,
+                "name": player.name,
+                "is_host": player.is_host,
+                "is_ready": player.is_ready,
+                "character_id": player.character_id
+            })
+            
+        current_match = self.get_current_match()
+        current_match_info = None
+        if current_match:
+            current_match_info = {
+                "id": current_match.id,
+                "status": current_match.status,
+                "scenario_id": current_match.scenario_id,
+                "scene": current_match.scene
+            }
+            
+        return {
+            "id": self.room.id,
+            "name": self.room.name,
+            "host_id": self.room.host_id,
+            "players": players,
+            "current_match": current_match_info,
+            "created_at": self.room.created_at.isoformat() if self.room.created_at else None
+        }
+        
     def set_scenario(self, scenario_id: str) -> Tuple[bool, Optional[str]]:
         """设置当前游戏使用的剧本
         

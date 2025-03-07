@@ -15,6 +15,71 @@ class TurnManager:
     def __init__(self, match: Match):
         self.match = match
         
+    def dump_state(self) -> Dict[str, Any]:
+        """返回当前状态供Inspector使用
+        
+        Returns:
+            Dict[str, Any]: 回合状态
+        """
+        current_turn = self.get_current_turn()
+        current_turn_info = None
+        
+        if current_turn:
+            current_turn_info = {
+                "id": current_turn.id,
+                "turn_type": current_turn.turn_type,
+                "status": current_turn.status,
+                "created_at": current_turn.created_at.isoformat() if current_turn.created_at else None,
+                "completed_at": current_turn.completed_at.isoformat() if current_turn.completed_at else None
+            }
+            
+            # 添加回合类型特有的信息
+            if isinstance(current_turn, DMTurn):
+                current_turn_info["narration"] = current_turn.narration
+                
+            elif isinstance(current_turn, ActionTurn):
+                current_turn_info["active_players"] = current_turn.active_players
+                current_turn_info["actions"] = current_turn.actions
+                
+            elif isinstance(current_turn, DiceTurn):
+                current_turn_info["active_players"] = current_turn.active_players
+                current_turn_info["difficulty"] = current_turn.difficulty
+                current_turn_info["action_desc"] = current_turn.action_desc
+                current_turn_info["dice_results"] = current_turn.dice_results
+        
+        turns = []
+        for turn in self.match.turns:
+            turn_info = {
+                "id": turn.id,
+                "turn_type": turn.turn_type,
+                "status": turn.status,
+                "created_at": turn.created_at.isoformat() if turn.created_at else None,
+                "completed_at": turn.completed_at.isoformat() if turn.completed_at else None
+            }
+            
+            # 添加回合类型特有的信息
+            if isinstance(turn, DMTurn):
+                turn_info["narration"] = turn.narration
+                
+            elif isinstance(turn, ActionTurn):
+                turn_info["active_players"] = turn.active_players
+                turn_info["actions"] = turn.actions
+                
+            elif isinstance(turn, DiceTurn):
+                turn_info["active_players"] = turn.active_players
+                turn_info["difficulty"] = turn.difficulty
+                turn_info["action_desc"] = turn.action_desc
+                turn_info["dice_results"] = turn.dice_results
+                
+            turns.append(turn_info)
+            
+        return {
+            "match_id": self.match.id,
+            "current_turn": current_turn_info,
+            "turns": turns,
+            "turn_count": len(self.match.turns)
+        }
+        
     def start_new_turn(self, turn_type: TurnType, active_players: List[str] = None, 
                       turn_mode: Optional[Literal["action", "dice"]] = None,
                       difficulty: Optional[int] = None,
