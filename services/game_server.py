@@ -38,23 +38,6 @@ class GameServer:
         # 初始化状态检查器
         self.state_inspector = GameStateInspector(self.game_instance)
         self.web_inspector = WebInspector(self.state_inspector)
-        
-        # 注册事件处理器
-        self._register_event_handlers()
-    
-    def _register_event_handlers(self) -> None:
-        """注册事件处理器"""
-        self.event_bus.subscribe("PLAYER_JOINED", self._handle_event)
-        self.event_bus.subscribe("PLAYER_ACTION", self._handle_event)
-        self.event_bus.subscribe("SELECT_CHARACTER", self._handle_event)
-        self.event_bus.subscribe("DM_NARRATION", self._handle_event)
-        self.event_bus.subscribe("START_MATCH", self._handle_event)
-        self.event_bus.subscribe("SET_SCENARIO", self._handle_event)
-        # 注册房间相关事件处理器
-        self.event_bus.subscribe("CREATE_ROOM", self._handle_event)
-        self.event_bus.subscribe("JOIN_ROOM", self._handle_event)
-        self.event_bus.subscribe("LIST_ROOMS", self._handle_event)
-        self.event_bus.subscribe("PLAYER_LEFT", self._handle_player_left)
     
     async def _handle_event(self, event: GameEvent) -> List[Union[GameEvent, Dict[str, str]]]:
         """使用命令模式处理事件"""
@@ -126,36 +109,14 @@ class GameServer:
             # 适当休眠以避免CPU占用过高
             await asyncio.sleep(0.1)
             
-    async def _handle_player_left(self, event: GameEvent) -> List[Union[GameEvent, Dict[str, str]]]:
-        """处理玩家离开事件"""
-        try:
-            player_id = event.data.get("player_id")
-            player_name = event.data.get("player_name")
-            room_id = event.data.get("room_id")
-            room_empty = event.data.get("room_empty", False)
-            
-            logger.info(f"玩家离开: {player_name} (ID: {player_id}), 房间: {room_id}, 房间是否为空: {room_empty}")
-            
-            # 如果房间为空，自动关闭房间
-            if room_empty and room_id in self.game_instance.rooms:
-                logger.info(f"自动关闭空房间: {room_id}")
-                del self.game_instance.rooms[room_id]
-                
-                # 通知其他玩家房间已关闭
-                return [{"recipient": player_id, "content": f"房间已自动关闭: {room_id}"}]
-                
-            return []
-        except Exception as e:
-            logger.exception(f"处理玩家离开事件失败: {str(e)}")
-            return []
             
     async def _process_event(self, event: GameEvent) -> None:
         """处理事件"""
         try:
             logger.debug(f"处理事件: 类型={event.event_type}, 数据={event.data}")
             
-            # 发布到事件总线 - 使用await等待异步结果
-            responses = await self.event_bus.publish(event)
+            # 直接使用命令模式处理事件
+            responses = await self._handle_event(event)
             
             # 处理响应
             for response in responses:

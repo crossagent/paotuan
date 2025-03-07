@@ -6,7 +6,7 @@ from core.events import EventBus
 from core.rules import RuleEngine
 from services.commands.base import GameCommand
 from services.commands.room_commands import CreateRoomCommand, JoinRoomCommand, ListRoomsCommand
-from services.commands.player_commands import PlayerJoinedCommand, PlayerActionCommand, SelectCharacterCommand
+from services.commands.player_commands import PlayerJoinedCommand, PlayerActionCommand, SelectCharacterCommand, PlayerLeftCommand
 from services.commands.game_commands import StartGameCommand, SetScenarioCommand, DMNarrationCommand
 
 logger = logging.getLogger(__name__)
@@ -55,5 +55,8 @@ class CommandFactory:
         elif event_type == "LIST_ROOMS":
             return ListRoomsCommand(self.game_instance, self.event_bus, 
                                    self.ai_service, self.rule_engine)
+        elif event_type == "PLAYER_LEFT":
+            return PlayerLeftCommand(self.game_instance, self.event_bus,
+                                    self.ai_service, self.rule_engine)
         else:
             raise ValueError(f"未知事件类型: {event_type}")
