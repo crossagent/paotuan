@@ -27,7 +27,7 @@ class GameServer:
         # 初始化服务
         self.ai_service = ai_service
         
-        # 命令工厂
+        # 命令工厂 - 使用新的构造函数
         self.command_factory = CommandFactory(
             self.game_instance, 
             self.event_bus,

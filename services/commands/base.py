@@ -1,44 +1,39 @@
 import logging
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional, Union, Protocol
 
-from models.entities import Room, Match
-from core.game import GameInstance
-from core.room import RoomManager
-from core.rules import RuleEngine
-from core.events import EventBus
 from adapters.base import GameEvent
 
 logger = logging.getLogger(__name__)
 
-class GameCommand:
-    """游戏命令基类"""
+class ServiceProvider(Protocol):
+    """服务提供者接口"""
     
-    def __init__(self, game_instance: GameInstance, event_bus: EventBus, 
-                 ai_service: Any, rule_engine: RuleEngine):
-        self.game_instance = game_instance
-        self.event_bus = event_bus
-        self.ai_service = ai_service
-        self.rule_engine = rule_engine
+    def get_service(self, service_type: type) -> Any:
+        """获取指定类型的服务实例"""
+        ...
+
+class GameCommand:
+    """游戏命令基类
+    
+    命令模式的实现，负责处理特定类型的事件。
+    命令通过服务提供者获取所需的服务，而不是直接依赖于具体实现。
+    """
+    
+    def __init__(self, service_provider: ServiceProvider):
+        """初始化命令
+        
+        Args:
+            service_provider: ServiceProvider - 服务提供者，用于获取服务实例
+        """
+        self.service_provider = service_provider
         
     async def execute(self, event: GameEvent) -> List[Union[GameEvent, Dict[str, str]]]:
-        """执行命令，返回事件或消息列表"""
+        """执行命令，返回事件或消息列表
+        
+        Args:
+            event: GameEvent - 事件对象
+            
+        Returns:
+            List[Union[GameEvent, Dict[str, str]]]: 响应消息列表
+        """
         raise NotImplementedError("子类必须实现execute方法")
-        
-    def _get_or_create_room(self) -> Room:
-        """获取或创建房间，公共方法"""
-        rooms = self.game_instance.list_rooms()
-        if not rooms:
-            return self.game_instance.create_room("默认房间")
-        return rooms[0]
-        
-    def _get_room_by_id(self, room_id: str) -> Optional[Room]:
-        """根据ID获取房间"""
-        return self.game_instance.get_room(room_id)
-        
-    def _get_player_room(self, player_id: str) -> Optional[Room]:
-        """获取玩家所在的房间"""
-        return self.game_instance.get_player_room(player_id)
-        
-    def _get_player_current_match(self, player_id: str) -> Optional[Match]:
-        """获取玩家当前的游戏局"""
-        return self.game_instance.get_player_match(player_id)

@@ -1,65 +1,126 @@
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Type
 
 from core.game import GameInstance
 from core.events import EventBus
 from core.rules import RuleEngine
-from services.commands.base import GameCommand
+from services.commands.base import GameCommand, ServiceProvider
 from services.commands.room_commands import CreateRoomCommand, JoinRoomCommand, ListRoomsCommand
 from services.commands.player_commands import PlayerJoinedCommand, SelectCharacterCommand, PlayerLeftCommand
 from services.commands.game_commands import StartMatchCommand, EndMatchCommand, SetScenarioCommand, DMNarrationCommand, CharacterActionCommand
+from services.game_service import GameService
+from services.room_service import RoomService
+from services.match_service import MatchService
+from services.turn_service import TurnService
+from services.narration_service import NarrationService
 
 logger = logging.getLogger(__name__)
+
+class CommandServiceProvider(ServiceProvider):
+    """命令服务提供者，实现ServiceProvider接口"""
+    
+    def __init__(self, game_instance: GameInstance, event_bus: EventBus, 
+                 ai_service: Any, rule_engine: RuleEngine):
+        """初始化服务提供者
+        
+        Args:
+            game_instance: GameInstance - 游戏实例
+            event_bus: EventBus - 事件总线
+            ai_service: Any - AI服务
+            rule_engine: RuleEngine - 规则引擎
+        """
+        self.game_instance = game_instance
+        self.event_bus = event_bus
+        self.ai_service = ai_service
+        self.rule_engine = rule_engine
+        self._services = {}
+        
+    def get_service(self, service_type: Type) -> Any:
+        """获取指定类型的服务实例
+        
+        Args:
+            service_type: Type - 服务类型
+            
+        Returns:
+            Any: 服务实例
+        """
+        # 如果服务已经创建，直接返回
+        if service_type in self._services:
+            return self._services[service_type]
+        
+        # 根据服务类型创建对应的服务实例
+        if service_type == GameService:
+            service = GameService(self.game_instance, self.event_bus)
+        elif service_type == RoomService:
+            service = RoomService(self.game_instance, self.event_bus)
+        elif service_type == MatchService:
+            service = MatchService(self.game_instance, self.event_bus)
+        elif service_type == TurnService:
+            service = TurnService(self.rule_engine)
+        elif service_type == NarrationService:
+            service = NarrationService(self.ai_service, self.rule_engine)
+        else:
+            raise ValueError(f"未知服务类型: {service_type}")
+        
+        # 缓存服务实例
+        self._services[service_type] = service
+        return service
 
 class CommandFactory:
     """命令工厂，用于创建命令对象"""
     
     def __init__(self, game_instance: GameInstance, event_bus: EventBus, 
                  ai_service: Any, rule_engine: RuleEngine):
-        self.game_instance = game_instance
-        self.event_bus = event_bus
-        self.ai_service = ai_service
-        self.rule_engine = rule_engine
+        """初始化命令工厂
+        
+        Args:
+            game_instance: GameInstance - 游戏实例
+            event_bus: EventBus - 事件总线
+            ai_service: Any - AI服务
+            rule_engine: RuleEngine - 规则引擎
+        """
+        self.service_provider = CommandServiceProvider(
+            game_instance, event_bus, ai_service, rule_engine
+        )
         
     def create_command(self, event_type: str) -> GameCommand:
-        """根据事件类型创建对应的命令对象"""
+        """根据事件类型创建对应的命令对象
+        
+        Args:
+            event_type: str - 事件类型
+            
+        Returns:
+            GameCommand: 命令对象
+            
+        Raises:
+            ValueError: 当事件类型未知时抛出
+        """
         # 玩家相关命令
         if event_type == "PLAYER_JOINED":
-            return PlayerJoinedCommand(self.game_instance, self.event_bus, 
-                                      self.ai_service, self.rule_engine)
+            return PlayerJoinedCommand(self.service_provider)
         elif event_type == "PLAYER_ACTION":
-            return CharacterActionCommand(self.game_instance, self.event_bus, 
-                                         self.ai_service, self.rule_engine)
+            return CharacterActionCommand(self.service_provider)
         elif event_type == "SELECT_CHARACTER":
-            return SelectCharacterCommand(self.game_instance, self.event_bus, 
-                                         self.ai_service, self.rule_engine)
+            return SelectCharacterCommand(self.service_provider)
         
         # 游戏相关命令
         elif event_type == "START_MATCH":
-            return StartMatchCommand(self.game_instance, self.event_bus, 
-                                   self.ai_service, self.rule_engine)
+            return StartMatchCommand(self.service_provider)
         elif event_type == "END_MATCH":
-            return EndMatchCommand(self.game_instance, self.event_bus, 
-                                  self.ai_service, self.rule_engine)
+            return EndMatchCommand(self.service_provider)
         elif event_type == "SET_SCENARIO":
-            return SetScenarioCommand(self.game_instance, self.event_bus, 
-                                     self.ai_service, self.rule_engine)
+            return SetScenarioCommand(self.service_provider)
         elif event_type == "DM_NARRATION":
-            return DMNarrationCommand(self.game_instance, self.event_bus, 
-                                     self.ai_service, self.rule_engine)
+            return DMNarrationCommand(self.service_provider)
         
         # 房间相关命令
         elif event_type == "CREATE_ROOM":
-            return CreateRoomCommand(self.game_instance, self.event_bus, 
-                                    self.ai_service, self.rule_engine)
+            return CreateRoomCommand(self.service_provider)
         elif event_type == "JOIN_ROOM":
-            return JoinRoomCommand(self.game_instance, self.event_bus, 
-                                  self.ai_service, self.rule_engine)
+            return JoinRoomCommand(self.service_provider)
         elif event_type == "LIST_ROOMS":
-            return ListRoomsCommand(self.game_instance, self.event_bus, 
-                                   self.ai_service, self.rule_engine)
+            return ListRoomsCommand(self.service_provider)
         elif event_type == "PLAYER_LEFT":
-            return PlayerLeftCommand(self.game_instance, self.event_bus,
-                                    self.ai_service, self.rule_engine)
+            return PlayerLeftCommand(self.service_provider)
         else:
             raise ValueError(f"未知事件类型: {event_type}")
