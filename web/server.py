@@ -7,7 +7,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 import uvicorn
 from pathlib import Path
-
 from web.routes import user_routes, room_routes, game_routes
 from web.auth import auth_manager
 from adapters.web_adapter import WebAdapter
@@ -93,7 +92,7 @@ def init_web_adapter(game_server):
     game_server.register_adapter(web_adapter)
     
     # 保存游戏实例引用
-    game_instance = game_server.game_instance
+    game_instance = game_server.game_state
     
     # 设置路由模块的引用
     game_routes.set_web_adapter(web_adapter)
