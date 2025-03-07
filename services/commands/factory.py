@@ -6,8 +6,8 @@ from core.events import EventBus
 from core.rules import RuleEngine
 from services.commands.base import GameCommand
 from services.commands.room_commands import CreateRoomCommand, JoinRoomCommand, ListRoomsCommand
-from services.commands.player_commands import PlayerJoinedCommand, PlayerActionCommand, SelectCharacterCommand, PlayerLeftCommand
-from services.commands.game_commands import StartGameCommand, SetScenarioCommand, DMNarrationCommand
+from services.commands.player_commands import PlayerJoinedCommand, SelectCharacterCommand, PlayerLeftCommand
+from services.commands.game_commands import StartGameCommand, SetScenarioCommand, DMNarrationCommand, CharacterActionCommand
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +28,8 @@ class CommandFactory:
             return PlayerJoinedCommand(self.game_instance, self.event_bus, 
                                       self.ai_service, self.rule_engine)
         elif event_type == "PLAYER_ACTION":
-            return PlayerActionCommand(self.game_instance, self.event_bus, 
-                                      self.ai_service, self.rule_engine)
+            return CharacterActionCommand(self.game_instance, self.event_bus, 
+                                         self.ai_service, self.rule_engine)
         elif event_type == "SELECT_CHARACTER":
             return SelectCharacterCommand(self.game_instance, self.event_bus, 
                                          self.ai_service, self.rule_engine)

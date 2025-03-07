@@ -1,14 +1,84 @@
 import logging
 from typing import List, Dict, Any, Optional, Union
 
-from models.entities import Room, Match, Player, Character, TurnType, TurnStatus, GameStatus, BaseTurn, DMTurn
+from models.entities import Room, Match, Player, Character, TurnType, TurnStatus, GameStatus, BaseTurn, DMTurn, DiceTurn
 from core.room import RoomManager
 from core.turn import TurnManager
-from adapters.base import GameEvent, DMNarrationEvent, SetScenarioEvent
+from adapters.base import GameEvent, DMNarrationEvent, SetScenarioEvent, PlayerActionEvent
 from services.commands.base import GameCommand
 from utils.scenario_loader import ScenarioLoader
 
 logger = logging.getLogger(__name__)
+
+class CharacterActionCommand(GameCommand):
+    """处理角色行动事件的命令"""
+    
+    async def execute(self, event: PlayerActionEvent) -> List[Union[GameEvent, Dict[str, str]]]:
+        from services.turn_service import TurnService
+        
+        player_id = event.data["player_id"]
+        action = event.data["action"]
+        
+        # 查找玩家所在的房间 - 使用辅助方法
+        player_room = self._get_player_room(player_id)
+                
+        # 如果找不到玩家所在的房间，提示玩家加入房间
+        if not player_room:
+            return [{"recipient": player_id, "content": "你尚未加入任何房间，请先使用 /加入游戏 或 /加入房间 [房间ID] 加入房间"}]
+        
+        # 创建房间管理器
+        room_manager = RoomManager(player_room, self.game_instance)
+        
+        # 获取玩家对应的角色
+        character = room_manager.get_character_by_player_id(player_id)
+        if not character:
+            return [{"recipient": player_id, "content": "找不到你的游戏角色，请尝试重新加入房间"}]
+        
+        # 检查是否有进行中的游戏局
+        match = room_manager.get_current_match()
+        if not match:
+            return [{"recipient": player_id, "content": "当前没有进行中的游戏局"}]
+            
+        # 获取回合管理器
+        turn_manager = TurnManager(match)
+        current_turn = turn_manager.get_current_turn()
+        
+        # 检查是否有活动回合
+        if not current_turn:
+            return [{"recipient": player_id, "content": "当前没有活动回合"}]
+            
+        # 检查是否是玩家回合
+        if current_turn.turn_type != TurnType.PLAYER:
+            return []
+        
+        # 使用TurnService处理角色行动
+        turn_service = TurnService(self.rule_engine)
+        success, action_messages = await turn_service.process_player_action(
+            player_id, 
+            action, 
+            current_turn, 
+            turn_manager, 
+            character
+        )
+        
+        if not success:
+            return action_messages
+            
+        # 检查回合是否完成
+        if current_turn.status != TurnStatus.COMPLETED:
+            return action_messages
+            
+        # 收集所有消息
+        messages = action_messages.copy()
+        
+        # 使用TurnService转换到DM回合
+        dm_turn, transition_messages = await turn_service.transition_to_dm_turn(match, turn_manager)
+        messages.extend(transition_messages)
+        
+        # 触发DM叙述，传入房间ID
+        messages.append(DMNarrationEvent("", player_room.id))
+        
+        return messages
 
 class StartGameCommand(GameCommand):
     """处理开始游戏事件的命令"""
