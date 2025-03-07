@@ -9,8 +9,8 @@ from adapters.base import GameEvent, PlayerJoinedEvent, PlayerActionEvent, Playe
 
 logger = logging.getLogger(__name__)
 
-class RoomManager:
-    """房间管理器"""
+class RoomController:
+    """房间控制器"""
     
     def __init__(self, room: Room, game_instance=None):
         self.room = room
@@ -67,10 +67,10 @@ class RoomManager:
             logger.warning(error_msg)
             return False, error_msg
         
-        # 使用MatchManager设置剧本
-        from core.match import MatchManager
-        match_manager = MatchManager(current_match, self.room, self.game_instance)
-        success, error_msg = match_manager.set_scenario(scenario_id)
+        # 使用MatchController设置剧本
+        from core.controllers.match_controller import MatchController
+        match_controller = MatchController(current_match, self.room, self.game_instance)
+        success, error_msg = match_controller.set_scenario(scenario_id)
         
         if not success:
             logger.warning(f"设置剧本失败: {error_msg}")

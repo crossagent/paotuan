@@ -8,11 +8,11 @@ from utils.scenario_loader import ScenarioLoader
 
 logger = logging.getLogger(__name__)
 
-class MatchManager:
-    """游戏局管理器，负责处理与游戏局(Match)相关的所有逻辑"""
+class MatchController:
+    """游戏局控制器，负责处理与游戏局(Match)相关的所有逻辑"""
     
     def __init__(self, match: Match, room: Room, game_instance):
-        """初始化游戏局管理器
+        """初始化游戏局控制器
         
         Args:
             match: Match - 游戏局对象
@@ -84,7 +84,7 @@ class MatchManager:
         }
     
     @classmethod
-    def create_match(cls, room: Room, game_instance, name: str = "新的冒险") -> "MatchManager":
+    def create_match(cls, room: Room, game_instance, name: str = "新的冒险") -> "MatchController":
         """创建新的游戏局
         
         Args:
@@ -93,7 +93,7 @@ class MatchManager:
             name: str - 游戏局名称
             
         Returns:
-            MatchManager - 新创建的游戏局管理器
+            MatchController - 新创建的游戏局控制器
         """
         match_id = str(uuid.uuid4())
         new_match = Match(
@@ -111,15 +111,15 @@ class MatchManager:
         return cls(new_match, room, game_instance)
     
     @classmethod
-    def get_current_match_manager(cls, room: Room, game_instance) -> Optional["MatchManager"]:
-        """获取房间当前的游戏局管理器
+    def get_current_match_controller(cls, room: Room, game_instance) -> Optional["MatchController"]:
+        """获取房间当前的游戏局控制器
         
         Args:
             room: Room - 房间对象
             game_instance - 游戏实例
             
         Returns:
-            Optional[MatchManager] - 当前游戏局管理器，如果没有则返回None
+            Optional[MatchController] - 当前游戏局控制器，如果没有则返回None
         """
         if not room.current_match_id:
             return None

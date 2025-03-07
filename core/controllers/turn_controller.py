@@ -9,8 +9,8 @@ from adapters.base import GameEvent, PlayerActionEvent, DMNarrationEvent
 
 logger = logging.getLogger(__name__)
 
-class TurnManager:
-    """回合管理器"""
+class TurnController:
+    """回合控制器"""
     
     def __init__(self, match: Match):
         self.match = match

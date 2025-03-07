@@ -2,7 +2,7 @@ import logging
 from typing import List, Dict, Any, Optional, Union, Tuple
 
 from models.entities import TurnType, DMTurn, ActionTurn, DiceTurn, TurnStatus, GameStatus, Match, Character, BaseTurn
-from core.turn import TurnManager
+from core.controllers.turn_controller import TurnController
 from core.rules import RuleEngine
 from ai.chains.story_gen import StoryResponse
 
@@ -85,12 +85,12 @@ class TurnService:
             
         return True, "可以行动"
     
-    async def transition_to_dm_turn(self, match: Match, turn_manager: TurnManager) -> Tuple[DMTurn, List[Dict[str, str]]]:
+    async def transition_to_dm_turn(self, match: Match, turn_controller: TurnController) -> Tuple[DMTurn, List[Dict[str, str]]]:
         """转换到DM回合
         
         Args:
             match: 游戏局
-            turn_manager: 回合管理器
+            turn_controller: 回合控制器
             
         Returns:
             Tuple[DMTurn, List[Dict[str, str]]]: (新的DM回合, 通知消息列表)
@@ -98,17 +98,17 @@ class TurnService:
         messages = []
         
         # 完成当前回合（如果有）
-        current_turn = turn_manager.get_current_turn()
+        current_turn = turn_controller.get_current_turn()
         if current_turn and current_turn.status != TurnStatus.COMPLETED:
-            turn_manager.complete_current_turn(TurnType.DM)
+            turn_controller.complete_current_turn(TurnType.DM)
         
         # 创建新的DM回合
-        dm_turn = turn_manager.start_new_turn(TurnType.DM)
+        dm_turn = turn_controller.start_new_turn(TurnType.DM)
         logger.info(f"创建新的DM回合: ID={dm_turn.id}")
         
         return dm_turn, messages
     
-    async def transition_to_player_turn(self, match: Match, turn_manager: TurnManager, 
+    async def transition_to_player_turn(self, match: Match, turn_controller: TurnController, 
                                        active_players: List[str], turn_mode: str = "action",
                                        difficulty: Optional[int] = None, 
                                        action_desc: Optional[str] = None) -> Tuple[Union[ActionTurn, DiceTurn], List[Dict[str, str]]]:
@@ -116,7 +116,7 @@ class TurnService:
         
         Args:
             match: 游戏局
-            turn_manager: 回合管理器
+            turn_controller: 回合控制器
             active_players: 激活的玩家列表
             turn_mode: 回合模式，"action"或"dice"
             difficulty: 骰子检定难度（仅在turn_mode为"dice"时有效）
@@ -128,16 +128,16 @@ class TurnService:
         messages = []
         
         # 完成当前回合（如果有）
-        current_turn = turn_manager.get_current_turn()
+        current_turn = turn_controller.get_current_turn()
         if current_turn and current_turn.status != TurnStatus.COMPLETED:
-            turn_manager.complete_current_turn(TurnType.PLAYER, active_players)
+            turn_controller.complete_current_turn(TurnType.PLAYER, active_players)
         
         # 创建新的玩家回合
         if turn_mode == "dice":
             if not difficulty:
                 raise ValueError("掷骰子回合必须指定难度")
                 
-            new_turn = turn_manager.start_new_turn(
+            new_turn = turn_controller.start_new_turn(
                 TurnType.PLAYER,
                 active_players,
                 turn_mode="dice",
@@ -154,7 +154,7 @@ class TurnService:
                     "content": f"需要进行 {action_desc or '行动'} 的骰子检定，难度为 {difficulty}。请描述你的具体行动。"
                 })
         else:
-            new_turn = turn_manager.start_new_turn(
+            new_turn = turn_controller.start_new_turn(
                 TurnType.PLAYER,
                 active_players,
                 turn_mode="action"
@@ -172,14 +172,14 @@ class TurnService:
         return new_turn, messages
     
     async def process_player_action(self, player_id: str, action: str, turn: Union[ActionTurn, DiceTurn], 
-                                   turn_manager: TurnManager, character: Optional[Character] = None) -> Tuple[bool, List[Dict[str, str]]]:
+                                   turn_controller: TurnController, character: Optional[Character] = None) -> Tuple[bool, List[Dict[str, str]]]:
         """处理玩家行动
         
         Args:
             player_id: 玩家ID
             action: 行动描述
             turn: 当前回合
-            turn_manager: 回合管理器
+            turn_controller: 回合控制器
             character: 玩家角色（可选）
             
         Returns:
@@ -194,7 +194,7 @@ class TurnService:
             return False, messages
         
         # 处理玩家行动
-        success = turn_manager.handle_player_action(player_id, action)
+        success = turn_controller.handle_player_action(player_id, action)
         if not success:
             messages.append({"recipient": player_id, "content": "无法处理你的行动"})
             return False, messages
@@ -315,7 +315,7 @@ class TurnService:
                     
         return messages
         
-    async def handle_turn_transition(self, response: Union[Dict[str, Any], Any], current_turn: Union[DMTurn, ActionTurn, DiceTurn], turn_manager: TurnManager, player_ids: List[str]) -> List[Dict[str, str]]:
+    async def handle_turn_transition(self, response: Union[Dict[str, Any], Any], current_turn: Union[DMTurn, ActionTurn, DiceTurn], turn_controller: TurnController, player_ids: List[str]) -> List[Dict[str, str]]:
         """处理回合转换和通知玩家"""
         messages = []
         narration = response.narration
@@ -325,13 +325,13 @@ class TurnService:
             current_turn.narration = narration
         
         # 完成DM回合，准备下一个玩家回合
-        turn_manager.complete_current_turn(TurnType.PLAYER, response.active_players)
+        turn_controller.complete_current_turn(TurnType.PLAYER, response.active_players)
         
         # 根据是否需要骰子检定创建不同类型的回合
         if response.need_dice_roll and response.difficulty:
             # 创建新的掷骰子回合
             action_desc = response.action_desc or "行动"
-            turn_manager.start_new_turn(
+            turn_controller.start_new_turn(
                 TurnType.PLAYER, 
                 response.active_players,
                 turn_mode="dice",
@@ -351,7 +351,7 @@ class TurnService:
                 })
         else:
             # 创建新的普通玩家回合
-            turn_manager.start_new_turn(
+            turn_controller.start_new_turn(
                 TurnType.PLAYER, 
                 response.active_players,
                 turn_mode="action"
