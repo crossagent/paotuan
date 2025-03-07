@@ -82,6 +82,11 @@ a:hover {
     font-weight: 500;
 }
 
+.form-group label .required {
+    color: var(--danger-color);
+    margin-left: 0.25rem;
+}
+
 .form-group input,
 .form-group select,
 .form-group textarea {
@@ -97,6 +102,13 @@ a:hover {
 .form-group textarea:focus {
     outline: none;
     border-color: var(--primary-color);
+}
+
+.form-group .form-hint {
+    display: block;
+    margin-top: 0.25rem;
+    font-size: 0.8rem;
+    color: #666;
 }
 
 /* 错误消息 */

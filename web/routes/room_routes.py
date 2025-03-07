@@ -104,8 +104,9 @@ async def create_room(
     room_controller, messages = await room_service.create_room(room_name, current_user.id)
     room = room_controller.room
     
-    # 将创建者添加到房间
-    player, _ = await room_service.add_player_to_room(room_controller, current_user.id, current_user.username)
+    # 设置最大玩家数
+    room.max_players = max_players
+    logger.info(f"设置房间最大玩家数: {max_players}")
     
     logger.info(f"创建房间: {room_name} (ID: {room.id}), 最大玩家数: {max_players}, 创建者: {current_user.username}")
     

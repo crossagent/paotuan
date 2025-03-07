@@ -248,6 +248,17 @@ const app = Vue.createApp({
         
         async createRoom() {
             try {
+                // 验证最大玩家数
+                if (!this.createRoomForm.max_players || this.createRoomForm.max_players < 2) {
+                    this.showNotification('最大玩家数不能小于2', 'error');
+                    return;
+                }
+                
+                if (this.createRoomForm.max_players > 10) {
+                    this.showNotification('最大玩家数不能超过10', 'error');
+                    return;
+                }
+                
                 const response = await axios.post(`${API_BASE_URL}/rooms/`, {
                     name: this.createRoomForm.name || `${this.user.username}的房间`,
                     max_players: this.createRoomForm.max_players || 6
