@@ -546,10 +546,13 @@ const app = Vue.createApp({
         },
         
         addPlayerMessage(sender, content) {
+            // 判断是否是当前用户发送的消息
+            const isSelf = sender === this.user.username;
             this.gameMessages.push({
                 type: 'player',
                 sender: sender,
-                content: content
+                content: content,
+                is_self: isSelf
             });
             this.scrollToBottom();
         },

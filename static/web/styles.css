@@ -515,6 +515,23 @@ a:hover {
     background-color: #e3f2fd;
 }
 
+/* 自己发送的消息样式 */
+.self-message {
+    margin-left: auto;
+    margin-right: 0;
+    text-align: right;
+    background-color: #dcf8c6 !important;
+    border-radius: 8px 0 8px 8px !important;
+}
+
+.self-message .message-header {
+    text-align: right;
+}
+
+.self-message .message-content {
+    text-align: right;
+}
+
 .message-header {
     font-weight: bold;
     margin-bottom: 0.25rem;

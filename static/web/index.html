@@ -245,7 +245,7 @@
                             
                             <div class="game-main">
                                 <div class="game-messages">
-                                    <div v-for="(message, index) in gameMessages" :key="index" class="message" :class="message.type">
+                                    <div v-for="(message, index) in gameMessages" :key="index" class="message" :class="[message.type, {'self-message': message.is_self}]">
                                         <div v-if="message.type === 'system'" class="system-message">
                                             {{ message.content }}
                                         </div>
