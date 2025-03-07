@@ -165,25 +165,34 @@ class GameStateInspector:
             "joined_at": player.joined_at.isoformat(),
             "is_ready": player.is_ready,
             "is_host": player.is_host,
-            "character_id": player.character_id
+            "character_id": player.character_id,
+            # 添加默认的角色属性，确保前端不会因缺少这些字段而出错
+            "health": 0,
+            "alive": False,
+            "attributes": {},
+            "items": [],
+            "location": None
         }
         
         # 如果有游戏状态，尝试查找关联的角色信息
         if self.game_state and player.character_id:
-            # 查找当前房间的当前比赛
-            room = None
-            for r in self.game_state.rooms.values():
-                if player.id in [p.id for p in r.players]:
-                    room = r
-                    break
+            # 直接使用game_state中的player_character_map查找角色ID
+            character_id = player.character_id
             
-            if room and room.current_match_id:
-                match = next((m for m in room.matches if m.id == room.current_match_id), None)
-                if match:
-                    character = next((c for c in match.characters if c.id == player.character_id), None)
-                    if character:
-                        # 添加角色信息
-                        result.update(self._format_character(character))
+            # 查找当前房间
+            room_id = self.game_state.player_room_map.get(player.id)
+            if room_id:
+                room = self.game_state.get_room(room_id)
+                if room and room.current_match_id:
+                    match = next((m for m in room.matches if m.id == room.current_match_id), None)
+                    if match:
+                        character = next((c for c in match.characters if c.id == character_id), None)
+                        if character:
+                            # 添加角色信息
+                            result.update(self._format_character(character))
+                            self.logger.debug(f"找到玩家 {player.name} 的角色信息")
+                        else:
+                            self.logger.debug(f"未找到玩家 {player.name} 的角色信息，character_id={character_id}")
         
         return result
     

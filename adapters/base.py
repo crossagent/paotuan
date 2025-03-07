@@ -9,12 +9,13 @@ class GameEvent:
 
 class PlayerJoinedEvent(GameEvent):
     """玩家加入事件"""
-    def __init__(self, player_id: str, player_name: str):
+    def __init__(self, player_id: str, player_name: str, room_id: str):
         super().__init__(
             event_type="PLAYER_JOINED",
             data={
                 "player_id": player_id,
-                "player_name": player_name
+                "player_name": player_name,
+                "room_id": room_id
             }
         )
 
