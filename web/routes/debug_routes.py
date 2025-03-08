@@ -447,8 +447,8 @@ async def simulate_player_action(
     
     # 根据回合类型处理行动
     if hasattr(turn, "difficulty"):  # DiceTurn
-        from core.controllers.turn_controller import TurnController
-        turn_controller = TurnController(turn)
+        from core.contexts.turn_context import TurnContext
+        turn_controller = TurnContext(turn)
         
         # 模拟掷骰子
         roll = action_data.get("roll")
@@ -474,8 +474,8 @@ async def simulate_player_action(
             "success": success
         }
     else:  # ActionTurn
-        from core.controllers.turn_controller import TurnController
-        turn_controller = TurnController(turn)
+        from core.contexts.turn_context import TurnContext
+        turn_controller = TurnContext(turn)
         
         # 记录行动
         turn_controller.record_action(player_id, action_text)
@@ -580,8 +580,8 @@ async def simulate_dm_turn(
     is_dice_turn = dm_data.get("is_dice_turn", False)
     
     # 更新DM回合
-    from core.controllers.turn_controller import TurnController
-    turn_controller = TurnController(turn)
+    from core.contexts.turn_context import TurnContext
+    turn_controller = TurnContext(turn)
     
     # 设置叙述
     turn.narration = narration

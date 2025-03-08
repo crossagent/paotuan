@@ -2,7 +2,7 @@ import logging
 from typing import List, Dict, Any, Optional, Union, Tuple
 
 from models.entities import TurnType, DMTurn, ActionTurn, DiceTurn, TurnStatus, GameStatus, Match, Character, BaseTurn
-from core.controllers.turn_controller import TurnController
+from core.contexts.turn_context import TurnContext
 from core.controllers.match_controller import MatchController
 from core.controllers.character_controller import CharacterController
 from services.game_state_service import GameStateService
@@ -60,12 +60,12 @@ class TurnService:
             
         return True, "可以开始回合"
     
-    def can_player_act(self, player_id: str, turn_controller: TurnController) -> Tuple[bool, str]:
+    def can_player_act(self, player_id: str, turn_controller: TurnContext) -> Tuple[bool, str]:
         """验证玩家是否可以在当前回合行动
         
         Args:
             player_id: str - 玩家ID
-            turn_controller: TurnController - 回合控制器
+            turn_controller: TurnContext - 回合控制器
             
         Returns:
             Tuple[bool, str]: (是否可以行动, 原因)
@@ -98,7 +98,7 @@ class TurnService:
             
         return True, "可以行动"
     
-    async def transition_to_dm_turn(self, match_controller: MatchController, room_controller) -> Tuple[TurnController, List[Dict[str, str]]]:
+    async def transition_to_dm_turn(self, match_controller: MatchController, room_controller) -> Tuple[TurnContext, List[Dict[str, str]]]:
         """转换到DM回合
         
         Args:
@@ -106,7 +106,7 @@ class TurnService:
             room_controller: RoomController - 房间控制器
             
         Returns:
-            Tuple[TurnController, List[Dict[str, str]]]: (新的DM回合控制器, 通知消息列表)
+            Tuple[TurnContext, List[Dict[str, str]]]: (新的DM回合控制器, 通知消息列表)
         """
         messages = []
         
@@ -115,12 +115,12 @@ class TurnService:
         if current_turn_id:
             for turn in match_controller.match.turns:
                 if turn.id == current_turn_id and turn.status != TurnStatus.COMPLETED:
-                    turn_controller = TurnController(turn)
+                    turn_controller = TurnContext(turn)
                     turn_controller.complete_turn(TurnType.DM)
                     break
         
         # 创建新的DM回合
-        dm_turn_controller = TurnController.create_dm_turn()
+        dm_turn_controller = TurnContext.create_dm_turn()
         
         # 将回合添加到游戏局
         match_controller.match.turns.append(dm_turn_controller.turn)
@@ -140,7 +140,7 @@ class TurnService:
     async def transition_to_player_turn(self, match_controller: MatchController, room_controller, 
                                        active_players: List[str], turn_mode: str = "action",
                                        difficulty: Optional[int] = None, 
-                                       action_desc: Optional[str] = None) -> Tuple[TurnController, List[Dict[str, str]]]:
+                                       action_desc: Optional[str] = None) -> Tuple[TurnContext, List[Dict[str, str]]]:
         """转换到玩家回合
         
         Args:
@@ -152,7 +152,7 @@ class TurnService:
             action_desc: Optional[str] - 行动描述（仅在turn_mode为"dice"时有效）
             
         Returns:
-            Tuple[TurnController, List[Dict[str, str]]]: (新的玩家回合控制器, 通知消息列表)
+            Tuple[TurnContext, List[Dict[str, str]]]: (新的玩家回合控制器, 通知消息列表)
         """
         messages = []
         
@@ -161,7 +161,7 @@ class TurnService:
         if current_turn_id:
             for turn in match_controller.match.turns:
                 if turn.id == current_turn_id and turn.status != TurnStatus.COMPLETED:
-                    turn_controller = TurnController(turn)
+                    turn_controller = TurnContext(turn)
                     turn_controller.complete_turn(TurnType.PLAYER, active_players)
                     break
         
@@ -170,7 +170,7 @@ class TurnService:
             if not difficulty:
                 raise ValueError("掷骰子回合必须指定难度")
                 
-            turn_controller = TurnController.create_dice_turn(
+            turn_controller = TurnContext.create_dice_turn(
                 active_players=active_players,
                 difficulty=difficulty,
                 action_desc=action_desc or "行动"
@@ -191,7 +191,7 @@ class TurnService:
                         "content": f"等待玩家进行 {action_desc or '行动'} 的骰子检定，难度为 {difficulty}。"
                     })
         else:
-            turn_controller = TurnController.create_action_turn(
+            turn_controller = TurnContext.create_action_turn(
                 active_players=active_players
             )
             
@@ -216,14 +216,14 @@ class TurnService:
                 
         return turn_controller, messages
     
-    async def process_player_action(self, player_id: str, action: str, turn_controller: TurnController, 
+    async def process_player_action(self, player_id: str, action: str, turn_controller: TurnContext, 
                                    match_controller: MatchController, character_controller: Optional[CharacterController] = None) -> Tuple[bool, List[Dict[str, str]]]:
         """处理玩家行动
         
         Args:
             player_id: str - 玩家ID
             action: str - 行动描述
-            turn_controller: TurnController - 回合控制器
+            turn_controller: TurnContext - 回合控制器
             match_controller: MatchController - 游戏局控制器
             character_controller: Optional[CharacterController] - 角色控制器
             
@@ -307,11 +307,11 @@ class TurnService:
         
         return True, messages
     
-    def process_dice_results(self, turn_controller: TurnController) -> List[Dict[str, Any]]:
+    def process_dice_results(self, turn_controller: TurnContext) -> List[Dict[str, Any]]:
         """处理骰子结果
         
         Args:
-            turn_controller: TurnController - 回合控制器
+            turn_controller: TurnContext - 回合控制器
             
         Returns:
             List[Dict[str, Any]]: 处理后的结果列表
@@ -331,11 +331,11 @@ class TurnService:
             
         return results
     
-    async def set_dm_narration(self, turn_controller: TurnController, narration: str, match_controller: MatchController, room_controller) -> List[Dict[str, str]]:
+    async def set_dm_narration(self, turn_controller: TurnContext, narration: str, match_controller: MatchController, room_controller) -> List[Dict[str, str]]:
         """设置DM回合的叙述内容并通知玩家
         
         Args:
-            turn_controller: TurnController - 回合控制器
+            turn_controller: TurnContext - 回合控制器
             narration: str - 叙述内容
             match_controller: MatchController - 游戏局控制器
             room_controller: RoomController - 房间控制器
@@ -357,13 +357,13 @@ class TurnService:
         
         return messages
     
-    async def handle_turn_transition(self, response: Union[Dict[str, Any], Any], turn_controller: TurnController, 
+    async def handle_turn_transition(self, response: Union[Dict[str, Any], Any], turn_controller: TurnContext, 
                                     match_controller: MatchController, room_controller) -> List[Dict[str, str]]:
         """处理回合转换和通知玩家
         
         Args:
             response: Union[Dict[str, Any], Any] - AI响应
-            turn_controller: TurnController - 当前回合控制器
+            turn_controller: TurnContext - 当前回合控制器
             match_controller: MatchController - 游戏局控制器
             room_controller: RoomController - 房间控制器
             
@@ -389,7 +389,7 @@ class TurnService:
         # 根据是否需要骰子检定创建不同类型的回合
         if need_dice_roll and difficulty:
             # 创建新的掷骰子回合
-            new_turn_controller = TurnController.create_dice_turn(
+            new_turn_controller = TurnContext.create_dice_turn(
                 active_players=active_players,
                 difficulty=difficulty,
                 action_desc=action_desc
@@ -411,7 +411,7 @@ class TurnService:
                 })
         else:
             # 创建新的普通玩家回合
-            new_turn_controller = TurnController.create_action_turn(
+            new_turn_controller = TurnContext.create_action_turn(
                 active_players=active_players
             )
             
@@ -432,20 +432,20 @@ class TurnService:
                 
         return messages
     
-    async def get_turn_controller(self, match_controller: MatchController) -> Optional[TurnController]:
+    async def get_turn_controller(self, match_controller: MatchController) -> Optional[TurnContext]:
         """获取当前回合控制器
         
         Args:
             match_controller: MatchController - 游戏局控制器
             
         Returns:
-            Optional[TurnController] - 回合控制器，如果不存在则返回None
+            Optional[TurnContext] - 回合控制器，如果不存在则返回None
         """
         if not match_controller.match.current_turn_id:
             return None
             
         for turn in match_controller.match.turns:
             if turn.id == match_controller.match.current_turn_id:
-                return TurnController(turn)
+                return TurnContext(turn)
                 
         return None
