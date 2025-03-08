@@ -143,10 +143,35 @@ class TestRoomManagement(unittest.TestCase):
         original_host_id = room.get("host_id")
         self.assertIsNotNone(original_host_id, "未找到房主ID")
         
-        # 房主离开房间（应该转移房主）
-        # 注意：这里假设房主是测试用户，实际测试中可能需要调整
-        leave_result = self.api_client.leave_room(room_id)
-        self.assertIsNotNone(leave_result, "离开房间失败")
+        # 先加入房间
+        join_result = self.api_client.join_room(room_id)
+        self.assertIsNotNone(join_result, "加入房间失败")
+        
+        # 获取房间中的玩家列表
+        room = self.api_client.get_room(room_id)
+        players = room.get("players", [])
+        host_player = None
+        for player in players:
+            if player.get("is_host"):
+                host_player = player
+                break
+                
+        self.assertIsNotNone(host_player, "未找到房主玩家")
+        
+        # 使用API模拟房主离开房间
+        try:
+            # 创建一个临时的API客户端，模拟房主
+            host_api_client = ApiClient()
+            # 登录为测试玩家1（房主）
+            success = host_api_client.login("test_player_1", "password")
+            self.assertTrue(success, "房主登录失败")
+            
+            # 房主离开房间
+            leave_result = host_api_client.leave_room(room_id)
+            self.assertIsNotNone(leave_result, "房主离开房间失败")
+            self.assertTrue(leave_result.get("success"), "房主离开房间操作未成功")
+        except Exception as e:
+            self.fail(f"模拟房主离开房间时发生异常: {str(e)}")
         
         # 验证房主已转移
         room = self.api_client.get_room(room_id)
