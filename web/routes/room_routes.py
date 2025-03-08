@@ -98,18 +98,18 @@ async def create_room(
         )
     
     # 创建房间
-    from core.controllers.room_controller import RoomController
+    from core.contexts.room_context import RoomContext
     
     # 使用RoomService创建房间
-    room_controller, messages = await room_service.create_room(room_name, current_user.id)
-    room = room_controller.room
+    room_context, messages = await room_service.create_room(room_name, current_user.id)
+    room = room_context.room
     
     # 设置最大玩家数
     room.max_players = max_players
     logger.info(f"设置房间最大玩家数: {max_players}")
     
     # 将创建者自动加入房间
-    player, _ = await room_service.add_player_to_room(room_controller, current_user.id, current_user.username)
+    player, _ = await room_service.add_player_to_room(room_context, current_user.id, current_user.username)
     logger.info(f"创建者 {current_user.username} (ID: {current_user.id}) 自动加入房间")
     
     logger.info(f"创建房间: {room_name} (ID: {room.id}), 最大玩家数: {max_players}, 创建者: {current_user.username}")
@@ -144,8 +144,8 @@ async def get_room(
         )
     
     # 创建房间控制器
-    from core.controllers.room_controller import RoomController
-    room_controller = RoomController(room)
+    from core.contexts.room_context import RoomContext
+    room_context = RoomContext(room)
     
     # 获取当前游戏局
     current_match = None
@@ -157,7 +157,7 @@ async def get_room(
                 break
     
     # 获取房主
-    host = room_controller.get_host()
+    host = room_context.get_host()
     
     # 构建玩家列表
     players = []
@@ -184,7 +184,7 @@ async def get_room(
         players.append(player_info)
     
     # 检查是否所有非房主玩家都已准备
-    all_ready = room_controller.are_all_players_ready()
+    all_ready = room_context.are_all_players_ready()
     
     return {
         "id": room.id,
@@ -224,11 +224,11 @@ async def join_room(
         )
     
     # 创建房间控制器
-    from core.controllers.room_controller import RoomController
-    room_controller = RoomController(room)
+    from core.contexts.room_context import RoomContext
+    room_context = RoomContext(room)
     
     # 将玩家添加到房间
-    player, _ = await room_service.add_player_to_room(room_controller, current_user.id, current_user.username)
+    player, _ = await room_service.add_player_to_room(room_context, current_user.id, current_user.username)
     
     logger.info(f"玩家加入房间: {current_user.username} (ID: {current_user.id}), 房间: {room.name} (ID: {room_id})")
     
@@ -262,11 +262,11 @@ async def leave_room(
         )
     
     # 创建房间控制器
-    from core.controllers.room_controller import RoomController
-    room_controller = RoomController(room)
+    from core.contexts.room_context import RoomContext
+    room_context = RoomContext(room)
     
     # 将玩家从房间中移除
-    success, messages = await room_service.remove_player_from_room(room_controller, current_user.id)
+    success, messages = await room_service.remove_player_from_room(room_context, current_user.id)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -304,11 +304,11 @@ async def start_game(
         )
     
     # 创建房间控制器
-    from core.controllers.room_controller import RoomController
-    room_controller = RoomController(room)
+    from core.contexts.room_context import RoomContext
+    room_context = RoomContext(room)
     
     # 检查是否是房主
-    host = room_controller.get_host()
+    host = room_context.get_host()
     if not host or host.id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -316,7 +316,7 @@ async def start_game(
         )
     
     # 检查是否所有玩家都已准备
-    if not room_controller.are_all_players_ready() and len(room.players) > 1:
+    if not room_context.are_all_players_ready() and len(room.players) > 1:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="还有玩家未准备，无法开始游戏"
@@ -405,14 +405,14 @@ async def set_player_ready(
         )
     
     # 创建房间控制器
-    from core.controllers.room_controller import RoomController
-    room_controller = RoomController(room)
+    from core.contexts.room_context import RoomContext
+    room_context = RoomContext(room)
     
     # 获取准备状态
     is_ready = ready_data.get("is_ready", True)
     
     # 检查是否是房主
-    host = room_controller.get_host()
+    host = room_context.get_host()
     if host and host.id == current_user.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -420,7 +420,7 @@ async def set_player_ready(
         )
     
     # 设置准备状态
-    success, _ = await room_service.set_player_ready(room_controller, current_user.id, is_ready)
+    success, _ = await room_service.set_player_ready(room_context, current_user.id, is_ready)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -428,7 +428,7 @@ async def set_player_ready(
         )
     
     # 检查是否所有玩家都已准备
-    all_ready = room_controller.are_all_players_ready()
+    all_ready = room_context.are_all_players_ready()
     
     logger.info(f"玩家 {current_user.username} (ID: {current_user.id}) {'准备完毕' if is_ready else '取消准备'}")
     
@@ -460,8 +460,8 @@ async def select_character(
         )
     
     # 创建房间控制器
-    from core.controllers.room_controller import RoomController
-    room_controller = RoomController(room)
+    from core.contexts.room_context import RoomContext
+    room_context = RoomContext(room)
     
     # 获取角色名称
     character_name = character_data.get("character_name")
@@ -493,7 +493,7 @@ async def select_character(
             current_match.characters.append(character)
         
         # 设置玩家角色
-        success, _ = await room_service.set_player_character(room_controller, current_user.id, character.id)
+        success, _ = await room_service.set_player_character(room_context, current_user.id, character.id)
         message = f"已选择角色: {character_name}" if success else "选择角色失败"
     if not success:
         raise HTTPException(
@@ -531,11 +531,11 @@ async def set_scenario(
         )
     
     # 创建房间控制器
-    from core.controllers.room_controller import RoomController
-    room_controller = RoomController(room)
+    from core.contexts.room_context import RoomContext
+    room_context = RoomContext(room)
     
     # 检查是否是房主
-    host = room_controller.get_host()
+    host = room_context.get_host()
     if not host or host.id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -615,11 +615,11 @@ async def kick_player(
         )
     
     # 创建房间控制器
-    from core.controllers.room_controller import RoomController
-    room_controller = RoomController(room)
+    from core.contexts.room_context import RoomContext
+    room_context = RoomContext(room)
     
     # 检查是否是房主
-    host = room_controller.get_host()
+    host = room_context.get_host()
     if not host or host.id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -634,7 +634,7 @@ async def kick_player(
         )
     
     # 踢出玩家
-    success, _ = await room_service.kick_player(room_controller, current_user.id, player_id)
+    success, _ = await room_service.kick_player(room_context, current_user.id, player_id)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

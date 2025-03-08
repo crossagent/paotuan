@@ -103,7 +103,7 @@ class TurnService:
         
         Args:
             match_controller: MatchContext - 游戏局控制器
-            room_controller: RoomController - 房间控制器
+            room_controller: RoomContext - 房间控制器
             
         Returns:
             Tuple[TurnContext, List[Dict[str, str]]]: (新的DM回合控制器, 通知消息列表)
@@ -145,7 +145,7 @@ class TurnService:
         
         Args:
             match_controller: MatchContext - 游戏局控制器
-            room_controller: RoomController - 房间控制器
+            room_controller: RoomContext - 房间控制器
             active_players: List[str] - 激活的玩家列表
             turn_mode: str - 回合模式，"action"或"dice"
             difficulty: Optional[int] - 骰子检定难度（仅在turn_mode为"dice"时有效）
@@ -338,7 +338,7 @@ class TurnService:
             turn_context: TurnContext - 回合控制器
             narration: str - 叙述内容
             match_controller: MatchContext - 游戏局控制器
-            room_controller: RoomController - 房间控制器
+            room_controller: RoomContext - 房间控制器
             
         Returns:
             List[Dict[str, str]]: 通知消息列表
@@ -365,7 +365,7 @@ class TurnService:
             response: Union[Dict[str, Any], Any] - AI响应
             turn_context: TurnContext - 当前回合控制器
             match_controller: MatchContext - 游戏局控制器
-            room_controller: RoomController - 房间控制器
+            room_controller: RoomContext - 房间控制器
             
         Returns:
             List[Dict[str, str]]: 通知消息列表

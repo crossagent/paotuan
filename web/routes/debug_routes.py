@@ -81,18 +81,18 @@ async def create_test_room(
     all_ready = room_data.get("all_ready", False)
     
     # 创建房间
-    from core.controllers.room_controller import RoomController
+    from core.contexts.room_context import RoomContext
     
     # 使用RoomService创建房间
-    room_controller, messages = await room_service.create_room(room_name, current_user.id)
-    room = room_controller.room
+    room_context, messages = await room_service.create_room(room_name, current_user.id)
+    room = room_context.room
     
     # 添加测试玩家
     for i in range(1, player_count):
         player_id = f"test_player_{i}"
         player_name = f"测试玩家{i}"
         player = Player(id=player_id, name=player_name, is_ready=all_ready)
-        room_controller.add_player(player_id, player_name)
+        room_context.add_player(player_id, player_name)
         game_state_service.update_player_room_mapping(player_id, room.id)
     
     logger.info(f"创建测试房间: {room_name} (ID: {room.id}), 玩家数量: {player_count}, 全部准备: {all_ready}")
