@@ -108,6 +108,10 @@ async def create_room(
     room.max_players = max_players
     logger.info(f"设置房间最大玩家数: {max_players}")
     
+    # 将创建者自动加入房间
+    player, _ = await room_service.add_player_to_room(room_controller, current_user.id, current_user.username)
+    logger.info(f"创建者 {current_user.username} (ID: {current_user.id}) 自动加入房间")
+    
     logger.info(f"创建房间: {room_name} (ID: {room.id}), 最大玩家数: {max_players}, 创建者: {current_user.username}")
     
     return {

@@ -276,8 +276,14 @@ const app = Vue.createApp({
                 // 显示通知
                 this.showNotification('房间创建成功', 'success');
                 
-                // 加入房间
-                await this.joinRoom(response.data);
+                // 直接加载房间详情并切换到游戏视图
+                await this.loadRoomDetail(response.data.id);
+                
+                // 切换到游戏视图
+                this.currentView = 'game';
+                
+                // 添加系统消息
+                this.addSystemMessage(`你已创建并加入房间: ${response.data.name}`);
             } catch (error) {
                 console.error('创建房间失败:', error);
                 this.showNotification('创建房间失败', 'error');

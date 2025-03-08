@@ -93,7 +93,7 @@ async def create_test_room(
         player_name = f"测试玩家{i}"
         player = Player(id=player_id, name=player_name, is_ready=all_ready)
         room_controller.add_player(player_id, player_name)
-        game_state_service.register_player_room(player_id, room.id)
+        game_state_service.update_player_room_mapping(player_id, room.id)
     
     logger.info(f"创建测试房间: {room_name} (ID: {room.id}), 玩家数量: {player_count}, 全部准备: {all_ready}")
     
@@ -162,7 +162,7 @@ async def create_test_game(
         character = Character(id=character_id, name=character_name, player_id=player.id)
         match.characters.append(character)
         player.character_id = character_id
-        game_state_service.register_player_character(player.id, character_id)
+        game_state_service.update_player_character_mapping(player.id, character_id)
     
     logger.info(f"创建测试游戏: 房间={room.name} (ID: {room_id}), 场景={scene}, 剧本ID={scenario_id}")
     

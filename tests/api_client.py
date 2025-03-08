@@ -78,6 +78,11 @@ class ApiClient:
         headers = self._get_headers()
         
         try:
+            # 记录请求信息
+            self.logger.info(f"发送请求: {method} {url}")
+            if data:
+                self.logger.info(f"请求数据: {json.dumps(data, ensure_ascii=False)}")
+            
             if method.upper() == "GET":
                 response = requests.get(url, headers=headers)
             elif method.upper() == "POST":
@@ -90,7 +95,11 @@ class ApiClient:
                 raise ValueError(f"不支持的HTTP方法: {method}")
             
             if response.status_code >= 200 and response.status_code < 300:
-                return response.json()
+                response_data = response.json()
+                # 记录成功响应内容
+                self.logger.info(f"请求成功: {method} {endpoint}")
+                self.logger.info(f"响应数据: {json.dumps(response_data, ensure_ascii=False)}")
+                return response_data
             else:
                 error_msg = f"请求失败: {response.status_code} - {response.text}"
                 self.logger.error(error_msg)
