@@ -4,7 +4,7 @@ from typing import List, Dict, Any, Optional, Union, Tuple
 from models.entities import TurnType, DMTurn, ActionTurn, DiceTurn, TurnStatus, GameStatus, Match, Character, BaseTurn
 from core.contexts.turn_context import TurnContext
 from core.contexts.match_context import MatchContext
-from core.controllers.character_controller import CharacterController
+from core.contexts.character_context import CharacterContext
 from services.game_state_service import GameStateService
 from core.rules import RuleEngine
 from ai.chains.story_gen import StoryResponse
@@ -217,7 +217,7 @@ class TurnService:
         return turn_context, messages
     
     async def process_player_action(self, player_id: str, action: str, turn_context: TurnContext, 
-                                   match_controller: MatchContext, character_controller: Optional[CharacterController] = None) -> Tuple[bool, List[Dict[str, str]]]:
+                                   match_controller: MatchContext, character_context: Optional[CharacterContext] = None) -> Tuple[bool, List[Dict[str, str]]]:
         """处理玩家行动
         
         Args:
@@ -225,7 +225,7 @@ class TurnService:
             action: str - 行动描述
             turn_context: TurnContext - 回合控制器
             match_controller: MatchContext - 游戏局控制器
-            character_controller: Optional[CharacterController] - 角色控制器
+            character_context: Optional[CharacterContext] - 角色控制器
             
         Returns:
             Tuple[bool, List[Dict[str, str]]]: (是否成功处理, 通知消息列表)
@@ -265,18 +265,18 @@ class TurnService:
                 return False, messages
             
             # 如果判定失败，减少角色血量
-            if not success and character_controller:
+            if not success and character_context:
                 # 使用规则引擎计算失败伤害并应用
                 health_change = self.rule_engine.calculate_failure_damage(difficulty)
-                character_controller.modify_health(health_change)
+                character_context.modify_health(health_change)
                 
                 # 通知玩家
                 messages.append({
                     "recipient": player_id, 
-                    "content": f"你的骰子检定失败，生命值减少 {abs(health_change)}，当前生命值: {character_controller.character.health}/{character_controller.character.max_health}"
+                    "content": f"你的骰子检定失败，生命值减少 {abs(health_change)}，当前生命值: {character_context.character.health}/{character_context.character.max_health}"
                 })
                 
-                logger.info(f"角色 {character_controller.character.id} (玩家 {player_id}) 判定失败，生命值变化: {health_change}，当前生命值: {character_controller.character.health}")
+                logger.info(f"角色 {character_context.character.id} (玩家 {player_id}) 判定失败，生命值变化: {health_change}，当前生命值: {character_context.character.health}")
             else:
                 # 通知玩家
                 messages.append({

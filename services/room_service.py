@@ -5,7 +5,7 @@ from datetime import datetime
 
 from models.entities import Room, Match, Player, Character, GameStatus
 from core.contexts.room_context import RoomContext
-from core.controllers.character_controller import CharacterController
+from core.contexts.character_context import CharacterContext
 from services.game_state_service import GameStateService
 from adapters.base import GameEvent, PlayerJoinedEvent, PlayerActionEvent, PlayerLeftEvent
 from core.events import EventBus

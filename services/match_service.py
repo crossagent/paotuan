@@ -5,7 +5,7 @@ from datetime import datetime
 
 from models.entities import Room, Match, Player, Character, GameStatus
 from core.contexts.match_context import MatchContext
-from core.controllers.character_controller import CharacterController
+from core.contexts.character_context import CharacterContext
 from core.contexts.room_context import RoomContext
 from services.game_state_service import GameStateService
 from utils.scenario_loader import ScenarioLoader
@@ -386,15 +386,15 @@ class MatchService:
                 
         if not character_exists:
             # 创建新角色
-            character_controller = CharacterController.create_character(
+            character_context = CharacterContext.create_character(
                 name=character_name,
                 player_id=player_id,
                 attributes=selected_character_info.get("attributes", {})
             )
             
             # 添加角色到游戏局
-            match_context.add_character(character_controller.character)
-            character_id = character_controller.character.id
+            match_context.add_character(character_context.character)
+            character_id = character_context.character.id
             
             logger.info(f"玩家 {player.name} 选择了角色 {character_name}，创建角色ID: {character_id}")
             
@@ -429,7 +429,7 @@ class MatchService:
         """
         return match_context.match.status == GameStatus.RUNNING
     
-    async def get_character_controller_by_player_id(self, match_context: MatchContext, player_id: str) -> Optional[CharacterController]:
+    async def get_character_context_by_player_id(self, match_context: MatchContext, player_id: str) -> Optional[CharacterContext]:
         """根据玩家ID获取角色控制器
         
         Args:
@@ -437,11 +437,11 @@ class MatchService:
             player_id: str - 玩家ID
             
         Returns:
-            Optional[CharacterController] - 角色控制器，如果不存在则返回None
+            Optional[CharacterContext] - 角色控制器，如果不存在则返回None
         """
         character = match_context.get_character_by_player_id(player_id)
         if character:
-            return CharacterController(character)
+            return CharacterContext(character)
         return None
     
     async def get_match_context(self, room_context:RoomContext) -> Optional[MatchContext]:

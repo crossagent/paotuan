@@ -162,8 +162,8 @@ class CharacterActionCommand(GameCommand):
             return []
         
         # 获取玩家角色控制器
-        character_controller = await match_service.get_character_controller_by_player_id(match_controller, player_id)
-        if not character_controller:
+        character_context = await match_service.get_character_context_by_player_id(match_controller, player_id)
+        if not character_context:
             return [{"recipient": player_id, "content": "找不到你的游戏角色，请尝试重新加入房间"}]
         
         # 处理玩家行动
@@ -172,7 +172,7 @@ class CharacterActionCommand(GameCommand):
             action=action, 
             turn_controller=turn_controller, 
             match_controller=match_controller,
-            character_controller=character_controller
+            character_context=character_context
         )
         
         if not success:
