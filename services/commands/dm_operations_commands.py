@@ -54,7 +54,7 @@ class DMNarrationCommand(GameCommand):
             return []
             
         # 获取回合控制器
-        turn_controller = await turn_service.get_turn_controller(match_controller)
+        turn_controller = await turn_service.get_turn_context(match_controller)
         if not turn_controller:
             logger.warning("当前没有活动回合")
             return []

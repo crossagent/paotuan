@@ -153,7 +153,7 @@ class CharacterActionCommand(GameCommand):
             return [{"recipient": player_id, "content": f"当前游戏局未在运行中"}]
             
         # 获取当前回合控制器
-        turn_controller = await turn_service.get_turn_controller(match_controller)
+        turn_controller = await turn_service.get_turn_context(match_controller)
         if not turn_controller:
             return [{"recipient": player_id, "content": "当前没有活动回合"}]
             
