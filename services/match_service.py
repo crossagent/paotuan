@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 
 from models.entities import Room, Match, Player, Character, GameStatus
-from core.controllers.match_controller import MatchController
+from core.contexts.match_context import MatchContext
 from core.controllers.character_controller import CharacterController
 from core.controllers.room_controller import RoomController
 from services.game_state_service import GameStateService
@@ -33,7 +33,7 @@ class MatchService:
         self.rule_engine = rule_engine or RuleEngine()
         self.event_bus = event_bus
     
-    async def create_match(self, room_controller, scene: str = "新的冒险") -> Tuple[MatchController, List[Dict[str, str]]]:
+    async def create_match(self, room_controller, scene: str = "新的冒险") -> Tuple[MatchContext, List[Dict[str, str]]]:
         """创建新的游戏局
         
         Args:
@@ -41,7 +41,7 @@ class MatchService:
             scene: str - 游戏局场景名称
             
         Returns:
-            Tuple[MatchController, List[Dict[str, str]]]: (游戏局控制器, 通知消息列表)
+            Tuple[MatchContext, List[Dict[str, str]]]: (游戏局控制器, 通知消息列表)
         """
         # 检查是否有进行中的游戏局
         if room_controller.room.current_match_id:
@@ -52,11 +52,11 @@ class MatchService:
                     return None, [{"recipient": room_controller.room.host_id, "content": error_msg}]
         
         # 创建新游戏局
-        match_controller = MatchController.create_match(scene)
+        match_context = MatchContext.create_match(scene)
         
         # 将游戏局添加到房间
-        room_controller.room.matches.append(match_controller.match)
-        room_controller.set_current_match(match_controller.match.id)
+        room_controller.room.matches.append(match_context.match)
+        room_controller.set_current_match(match_context.match.id)
         
         # 生成通知消息
         messages = []
@@ -66,21 +66,21 @@ class MatchService:
         for player in room_controller.list_players():
             messages.append({"recipient": player.id, "content": create_message})
         
-        logger.info(f"创建新游戏局: {scene} (ID: {match_controller.match.id})")
-        return match_controller, messages
+        logger.info(f"创建新游戏局: {scene} (ID: {match_context.match.id})")
+        return match_context, messages
     
-    async def start_match(self, match_controller: MatchController, room_controller) -> Tuple[bool, List[Dict[str, str]]]:
+    async def start_match(self, match_context: MatchContext, room_controller) -> Tuple[bool, List[Dict[str, str]]]:
         """开始游戏局
         
         Args:
-            match_controller: MatchController - 游戏局控制器
+            match_context: MatchContext - 游戏局控制器
             room_controller: RoomController - 房间控制器
             
         Returns:
             Tuple[bool, List[Dict[str, str]]]: (是否成功开始游戏局, 通知消息列表)
         """
         # 检查是否已设置剧本
-        if not match_controller.match.scenario_id:
+        if not match_context.match.scenario_id:
             error_msg = "无法开始游戏局: 未设置剧本"
             logger.warning(error_msg)
             return False, [{"recipient": room_controller.room.host_id, "content": error_msg}]
@@ -97,8 +97,8 @@ class MatchService:
             logger.warning(error_msg)
             return False, [{"recipient": room_controller.room.host_id, "content": error_msg}]
         
-        # 使用MatchController开始游戏局
-        success = match_controller.start_match()
+        # 使用MatchContext开始游戏局
+        success = match_context.start_match()
         
         if not success:
             error_msg = "开始游戏局失败"
@@ -109,26 +109,26 @@ class MatchService:
         messages = []
         
         # 通知房间中的所有玩家
-        start_message = f"游戏开始！剧本: {match_controller.match.scenario_id}"
+        start_message = f"游戏开始！剧本: {match_context.match.scenario_id}"
         for player in room_controller.list_players():
             messages.append({"recipient": player.id, "content": start_message})
         
-        logger.info(f"游戏局开始: ID={match_controller.match.id}, 剧本={match_controller.match.scenario_id}")
+        logger.info(f"游戏局开始: ID={match_context.match.id}, 剧本={match_context.match.scenario_id}")
         return True, messages
     
-    async def end_match(self, match_controller: MatchController, room_controller, result: Optional[str] = None) -> Tuple[bool, List[Dict[str, str]]]:
+    async def end_match(self, match_context: MatchContext, room_controller, result: Optional[str] = None) -> Tuple[bool, List[Dict[str, str]]]:
         """结束游戏局
         
         Args:
-            match_controller: MatchController - 游戏局控制器
+            match_context: MatchContext - 游戏局控制器
             room_controller: RoomController - 房间控制器
             result: Optional[str] - 游戏结果
             
         Returns:
             Tuple[bool, List[Dict[str, str]]]: (是否成功结束游戏局, 通知消息列表)
         """
-        # 使用MatchController结束游戏局
-        success = match_controller.end_match(result)
+        # 使用MatchContext结束游戏局
+        success = match_context.end_match(result)
         
         if not success:
             error_msg = "结束游戏局失败"
@@ -143,21 +143,21 @@ class MatchService:
         for player in room_controller.list_players():
             messages.append({"recipient": player.id, "content": end_message})
         
-        logger.info(f"游戏局结束: ID={match_controller.match.id}, 结果={result or '未知'}")
+        logger.info(f"游戏局结束: ID={match_context.match.id}, 结果={result or '未知'}")
         return True, messages
     
-    async def pause_match(self, match_controller: MatchController, room_controller) -> Tuple[bool, List[Dict[str, str]]]:
+    async def pause_match(self, match_context: MatchContext, room_controller) -> Tuple[bool, List[Dict[str, str]]]:
         """暂停游戏局
         
         Args:
-            match_controller: MatchController - 游戏局控制器
+            match_context: MatchContext - 游戏局控制器
             room_controller: RoomController - 房间控制器
             
         Returns:
             Tuple[bool, List[Dict[str, str]]]: (是否成功暂停游戏局, 通知消息列表)
         """
-        # 使用MatchController暂停游戏局
-        success = match_controller.pause_match()
+        # 使用MatchContext暂停游戏局
+        success = match_context.pause_match()
         
         if not success:
             error_msg = "暂停游戏局失败"
@@ -172,21 +172,21 @@ class MatchService:
         for player in room_controller.list_players():
             messages.append({"recipient": player.id, "content": pause_message})
         
-        logger.info(f"游戏局暂停: ID={match_controller.match.id}")
+        logger.info(f"游戏局暂停: ID={match_context.match.id}")
         return True, messages
     
-    async def resume_match(self, match_controller: MatchController, room_controller) -> Tuple[bool, List[Dict[str, str]]]:
+    async def resume_match(self, match_context: MatchContext, room_controller) -> Tuple[bool, List[Dict[str, str]]]:
         """恢复游戏局
         
         Args:
-            match_controller: MatchController - 游戏局控制器
+            match_context: MatchContext - 游戏局控制器
             room_controller: RoomController - 房间控制器
             
         Returns:
             Tuple[bool, List[Dict[str, str]]]: (是否成功恢复游戏局, 通知消息列表)
         """
-        # 使用MatchController恢复游戏局
-        success = match_controller.resume_match()
+        # 使用MatchContext恢复游戏局
+        success = match_context.resume_match()
         
         if not success:
             error_msg = "恢复游戏局失败"
@@ -201,14 +201,14 @@ class MatchService:
         for player in room_controller.list_players():
             messages.append({"recipient": player.id, "content": resume_message})
         
-        logger.info(f"游戏局恢复: ID={match_controller.match.id}")
+        logger.info(f"游戏局恢复: ID={match_context.match.id}")
         return True, messages
     
-    async def set_scenario(self, match_controller: MatchController, room_controller, scenario_id: str) -> Tuple[bool, Optional[str], List[Dict[str, str]]]:
+    async def set_scenario(self, match_context: MatchContext, room_controller, scenario_id: str) -> Tuple[bool, Optional[str], List[Dict[str, str]]]:
         """设置剧本
         
         Args:
-            match_controller: MatchController - 游戏局控制器
+            match_context: MatchContext - 游戏局控制器
             room_controller: RoomController - 房间控制器
             scenario_id: str - 剧本ID
             
@@ -237,8 +237,8 @@ class MatchService:
             logger.warning(f"无法设置剧本: {error_msg}")
             return False, error_msg, [{"recipient": room_controller.room.host_id, "content": error_msg}]
         
-        # 使用MatchController设置剧本
-        success = match_controller.set_scenario(scenario_id)
+        # 使用MatchContext设置剧本
+        success = match_context.set_scenario(scenario_id)
         
         if not success:
             error_msg = "设置剧本失败: 游戏局已经开始"
@@ -255,7 +255,7 @@ class MatchService:
         
         # 加载可选角色列表
         available_characters = self.load_available_characters(scenario)
-        match_controller.set_available_characters(available_characters)
+        match_context.set_available_characters(available_characters)
         
         # 通知玩家可选角色
         if available_characters:
@@ -264,7 +264,7 @@ class MatchService:
             for player in room_controller.list_players():
                 messages.append({"recipient": player.id, "content": character_message})
         
-        logger.info(f"设置剧本: 游戏局ID={match_controller.match.id}, 剧本ID={scenario_id}")
+        logger.info(f"设置剧本: 游戏局ID={match_context.match.id}, 剧本ID={scenario_id}")
         return True, None, messages
     
     def load_available_characters(self, scenario) -> List[Dict[str, Any]]:
@@ -314,11 +314,11 @@ class MatchService:
                 
         return available_characters
     
-    async def select_character(self, match_controller: MatchController, room_controller, player_id: str, character_name: str) -> Tuple[bool, str, List[Dict[str, str]]]:
+    async def select_character(self, match_context: MatchContext, room_controller, player_id: str, character_name: str) -> Tuple[bool, str, List[Dict[str, str]]]:
         """玩家选择角色
         
         Args:
-            match_controller: MatchController - 游戏局控制器
+            match_context: MatchContext - 游戏局控制器
             room_controller: RoomController - 房间控制器
             player_id: str - 玩家ID
             character_name: str - 角色名称
@@ -327,17 +327,17 @@ class MatchService:
             Tuple[bool, str, List[Dict[str, str]]]: (是否选择成功, 消息, 通知消息列表)
         """
         # 检查游戏状态，只允许在游戏开始前（WAITING状态）选择角色
-        if match_controller.match.status != GameStatus.WAITING:
+        if match_context.match.status != GameStatus.WAITING:
             error_msg = "游戏已经开始，无法更换角色"
             return False, error_msg, [{"recipient": player_id, "content": error_msg}]
             
         # 检查剧本是否已设置
-        if not match_controller.match.scenario_id:
+        if not match_context.match.scenario_id:
             error_msg = "请先设置剧本再选择角色"
             return False, error_msg, [{"recipient": player_id, "content": error_msg}]
             
         # 检查可选角色列表是否为空
-        if not match_controller.match.available_characters:
+        if not match_context.match.available_characters:
             error_msg = "当前剧本没有可选角色"
             return False, error_msg, [{"recipient": player_id, "content": error_msg}]
             
@@ -349,25 +349,25 @@ class MatchService:
             
         # 查找角色
         selected_character_info = None
-        for char_info in match_controller.match.available_characters:
+        for char_info in match_context.match.available_characters:
             if char_info.get("name") == character_name:
                 selected_character_info = char_info
                 break
                 
         if not selected_character_info:
-            available_chars = ", ".join([c.get("name", "未知") for c in match_controller.match.available_characters])
+            available_chars = ", ".join([c.get("name", "未知") for c in match_context.match.available_characters])
             error_msg = f"找不到角色: {character_name}。可选角色: {available_chars}"
             return False, error_msg, [{"recipient": player_id, "content": error_msg}]
             
         # 检查角色是否已被选择
-        for character in match_controller.match.characters:
+        for character in match_context.match.characters:
             if character.name == character_name and character.player_id is not None and character.player_id != player_id:
                 error_msg = f"角色 {character_name} 已被其他玩家选择"
                 return False, error_msg, [{"recipient": player_id, "content": error_msg}]
                 
         # 如果玩家已有角色，先解除绑定
         if player.character_id:
-            old_character = match_controller.get_character(player.character_id)
+            old_character = match_context.get_character(player.character_id)
             if old_character:
                 old_character.player_id = None
                 logger.info(f"解除玩家 {player.name} 与角色 {old_character.name} 的绑定")
@@ -376,7 +376,7 @@ class MatchService:
         character_exists = False
         character_id = None
         
-        for character in match_controller.match.characters:
+        for character in match_context.match.characters:
             if character.name == character_name and character.player_id is None:
                 character.player_id = player_id
                 character_id = character.id
@@ -393,7 +393,7 @@ class MatchService:
             )
             
             # 添加角色到游戏局
-            match_controller.add_character(character_controller.character)
+            match_context.add_character(character_controller.character)
             character_id = character_controller.character.id
             
             logger.info(f"玩家 {player.name} 选择了角色 {character_name}，创建角色ID: {character_id}")
@@ -418,46 +418,46 @@ class MatchService:
                 
         return True, f"成功选择角色: {character_name}", messages
     
-    async def is_match_running(self, match_controller: MatchController) -> bool:
+    async def is_match_running(self, match_context: MatchContext) -> bool:
         """检查游戏局是否在运行中
         
         Args:
-            match_controller: MatchController - 游戏局控制器
+            match_context: MatchContext - 游戏局控制器
             
         Returns:
             bool - 是否在运行中
         """
-        return match_controller.match.status == GameStatus.RUNNING
+        return match_context.match.status == GameStatus.RUNNING
     
-    async def get_character_controller_by_player_id(self, match_controller: MatchController, player_id: str) -> Optional[CharacterController]:
+    async def get_character_controller_by_player_id(self, match_context: MatchContext, player_id: str) -> Optional[CharacterController]:
         """根据玩家ID获取角色控制器
         
         Args:
-            match_controller: MatchController - 游戏局控制器
+            match_context: MatchContext - 游戏局控制器
             player_id: str - 玩家ID
             
         Returns:
             Optional[CharacterController] - 角色控制器，如果不存在则返回None
         """
-        character = match_controller.get_character_by_player_id(player_id)
+        character = match_context.get_character_by_player_id(player_id)
         if character:
             return CharacterController(character)
         return None
     
-    async def get_match_controller(self, room_controller:RoomController) -> Optional[MatchController]:
+    async def get_match_context(self, room_controller:RoomController) -> Optional[MatchContext]:
         """获取当前游戏局控制器
         
         Args:
             room_controller: RoomController - 房间控制器
             
         Returns:
-            Optional[MatchController] - 游戏局控制器，如果不存在则返回None
+            Optional[MatchContext] - 游戏局控制器，如果不存在则返回None
         """
         if not room_controller.room.current_match_id:
             return None
             
         for match in room_controller.room.matches:
             if match.id == room_controller.room.current_match_id:
-                return MatchController(match)
+                return MatchContext(match)
                 
         return None

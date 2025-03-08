@@ -3,7 +3,7 @@ from typing import List, Dict, Any, Optional, Union, Tuple
 
 from models.entities import TurnType, DMTurn, ActionTurn, DiceTurn, TurnStatus, GameStatus, Match, Character, BaseTurn
 from core.contexts.turn_context import TurnContext
-from core.controllers.match_controller import MatchController
+from core.contexts.match_context import MatchContext
 from core.controllers.character_controller import CharacterController
 from services.game_state_service import GameStateService
 from core.rules import RuleEngine
@@ -27,26 +27,26 @@ class TurnService:
         self.rule_engine = rule_engine or RuleEngine()
         self.event_bus = event_bus
     
-    def can_start_turn(self, turn_type: TurnType, match_controller: MatchController, active_players: List[str] = None) -> Tuple[bool, str]:
+    def can_start_turn(self, turn_type: TurnType, match_context: MatchContext, active_players: List[str] = None) -> Tuple[bool, str]:
         """验证是否可以开始某类回合
         
         Args:
             turn_type: TurnType - 回合类型
-            match_controller: MatchController - 游戏局控制器
+            match_context: MatchContext - 游戏局控制器
             active_players: List[str] - 激活的玩家列表（仅对玩家回合有效）
             
         Returns:
             Tuple[bool, str]: (是否可以开始, 原因)
         """
         # 检查游戏状态
-        if match_controller.match.status != GameStatus.RUNNING:
-            return False, f"游戏未在运行中，当前状态: {match_controller.match.status}"
+        if match_context.match.status != GameStatus.RUNNING:
+            return False, f"游戏未在运行中，当前状态: {match_context.match.status}"
         
         # 获取当前回合
         current_turn = None
-        if match_controller.match.current_turn_id:
-            for turn in match_controller.match.turns:
-                if turn.id == match_controller.match.current_turn_id:
+        if match_context.match.current_turn_id:
+            for turn in match_context.match.turns:
+                if turn.id == match_context.match.current_turn_id:
                     current_turn = turn
                     break
         
@@ -98,11 +98,11 @@ class TurnService:
             
         return True, "可以行动"
     
-    async def transition_to_dm_turn(self, match_controller: MatchController, room_controller) -> Tuple[TurnContext, List[Dict[str, str]]]:
+    async def transition_to_dm_turn(self, match_context: MatchContext, room_controller) -> Tuple[TurnContext, List[Dict[str, str]]]:
         """转换到DM回合
         
         Args:
-            match_controller: MatchController - 游戏局控制器
+            match_context: MatchContext - 游戏局控制器
             room_controller: RoomController - 房间控制器
             
         Returns:
@@ -111,9 +111,9 @@ class TurnService:
         messages = []
         
         # 完成当前回合（如果有）
-        current_turn_id = match_controller.match.current_turn_id
+        current_turn_id = match_context.match.current_turn_id
         if current_turn_id:
-            for turn in match_controller.match.turns:
+            for turn in match_context.match.turns:
                 if turn.id == current_turn_id and turn.status != TurnStatus.COMPLETED:
                     turn_controller = TurnContext(turn)
                     turn_controller.complete_turn(TurnType.DM)
@@ -123,8 +123,8 @@ class TurnService:
         dm_turn_controller = TurnContext.create_dm_turn()
         
         # 将回合添加到游戏局
-        match_controller.match.turns.append(dm_turn_controller.turn)
-        match_controller.set_current_turn(dm_turn_controller.turn.id)
+        match_context.match.turns.append(dm_turn_controller.turn)
+        match_context.set_current_turn(dm_turn_controller.turn.id)
         
         logger.info(f"创建新的DM回合: ID={dm_turn_controller.turn.id}")
         
@@ -137,14 +137,14 @@ class TurnService:
         
         return dm_turn_controller, messages
     
-    async def transition_to_player_turn(self, match_controller: MatchController, room_controller, 
+    async def transition_to_player_turn(self, match_context: MatchContext, room_controller, 
                                        active_players: List[str], turn_mode: str = "action",
                                        difficulty: Optional[int] = None, 
                                        action_desc: Optional[str] = None) -> Tuple[TurnContext, List[Dict[str, str]]]:
         """转换到玩家回合
         
         Args:
-            match_controller: MatchController - 游戏局控制器
+            match_context: MatchContext - 游戏局控制器
             room_controller: RoomController - 房间控制器
             active_players: List[str] - 激活的玩家列表
             turn_mode: str - 回合模式，"action"或"dice"
@@ -157,9 +157,9 @@ class TurnService:
         messages = []
         
         # 完成当前回合（如果有）
-        current_turn_id = match_controller.match.current_turn_id
+        current_turn_id = match_context.match.current_turn_id
         if current_turn_id:
-            for turn in match_controller.match.turns:
+            for turn in match_context.match.turns:
                 if turn.id == current_turn_id and turn.status != TurnStatus.COMPLETED:
                     turn_controller = TurnContext(turn)
                     turn_controller.complete_turn(TurnType.PLAYER, active_players)
@@ -211,20 +211,20 @@ class TurnService:
                     })
         
         # 将回合添加到游戏局
-        match_controller.match.turns.append(turn_controller.turn)
-        match_controller.set_current_turn(turn_controller.turn.id)
+        match_context.match.turns.append(turn_controller.turn)
+        match_context.set_current_turn(turn_controller.turn.id)
                 
         return turn_controller, messages
     
     async def process_player_action(self, player_id: str, action: str, turn_controller: TurnContext, 
-                                   match_controller: MatchController, character_controller: Optional[CharacterController] = None) -> Tuple[bool, List[Dict[str, str]]]:
+                                   match_context: MatchContext, character_controller: Optional[CharacterController] = None) -> Tuple[bool, List[Dict[str, str]]]:
         """处理玩家行动
         
         Args:
             player_id: str - 玩家ID
             action: str - 行动描述
             turn_controller: TurnContext - 回合控制器
-            match_controller: MatchController - 游戏局控制器
+            match_context: MatchContext - 游戏局控制器
             character_controller: Optional[CharacterController] - 角色控制器
             
         Returns:
@@ -302,7 +302,7 @@ class TurnService:
                     result_message += f"{player_name} 尝试 {result['action']}，掷出了 {result['roll']}，难度 {result['difficulty']}，{'成功' if result['success'] else '失败'}\n"
                 
                 # 通知所有玩家
-                for player in match_controller.match.players:
+                for player in match_context.match.players:
                     messages.append({"recipient": player.id, "content": result_message})
         
         return True, messages
@@ -331,13 +331,13 @@ class TurnService:
             
         return results
     
-    async def set_dm_narration(self, turn_controller: TurnContext, narration: str, match_controller: MatchController, room_controller) -> List[Dict[str, str]]:
+    async def set_dm_narration(self, turn_controller: TurnContext, narration: str, match_context: MatchContext, room_controller) -> List[Dict[str, str]]:
         """设置DM回合的叙述内容并通知玩家
         
         Args:
             turn_controller: TurnContext - 回合控制器
             narration: str - 叙述内容
-            match_controller: MatchController - 游戏局控制器
+            match_context: MatchContext - 游戏局控制器
             room_controller: RoomController - 房间控制器
             
         Returns:
@@ -358,13 +358,13 @@ class TurnService:
         return messages
     
     async def handle_turn_transition(self, response: Union[Dict[str, Any], Any], turn_controller: TurnContext, 
-                                    match_controller: MatchController, room_controller) -> List[Dict[str, str]]:
+                                    match_context: MatchContext, room_controller) -> List[Dict[str, str]]:
         """处理回合转换和通知玩家
         
         Args:
             response: Union[Dict[str, Any], Any] - AI响应
             turn_controller: TurnContext - 当前回合控制器
-            match_controller: MatchController - 游戏局控制器
+            match_context: MatchContext - 游戏局控制器
             room_controller: RoomController - 房间控制器
             
         Returns:
@@ -396,8 +396,8 @@ class TurnService:
             )
             
             # 将回合添加到游戏局
-            match_controller.match.turns.append(new_turn_controller.turn)
-            match_controller.set_current_turn(new_turn_controller.turn.id)
+            match_context.match.turns.append(new_turn_controller.turn)
+            match_context.set_current_turn(new_turn_controller.turn.id)
             
             # 通知所有玩家
             for player in room_controller.list_players():
@@ -416,8 +416,8 @@ class TurnService:
             )
             
             # 将回合添加到游戏局
-            match_controller.match.turns.append(new_turn_controller.turn)
-            match_controller.set_current_turn(new_turn_controller.turn.id)
+            match_context.match.turns.append(new_turn_controller.turn)
+            match_context.set_current_turn(new_turn_controller.turn.id)
             
             # 通知所有玩家
             for player in room_controller.list_players():
@@ -432,20 +432,20 @@ class TurnService:
                 
         return messages
     
-    async def get_turn_controller(self, match_controller: MatchController) -> Optional[TurnContext]:
+    async def get_turn_controller(self, match_context: MatchContext) -> Optional[TurnContext]:
         """获取当前回合控制器
         
         Args:
-            match_controller: MatchController - 游戏局控制器
+            match_context: MatchContext - 游戏局控制器
             
         Returns:
             Optional[TurnContext] - 回合控制器，如果不存在则返回None
         """
-        if not match_controller.match.current_turn_id:
+        if not match_context.match.current_turn_id:
             return None
             
-        for turn in match_controller.match.turns:
-            if turn.id == match_controller.match.current_turn_id:
+        for turn in match_context.match.turns:
+            if turn.id == match_context.match.current_turn_id:
                 return TurnContext(turn)
                 
         return None
