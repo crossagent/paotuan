@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 import uvicorn
 from pathlib import Path
-from web.routes import user_routes, room_routes, game_routes
+from web.routes import user_routes, room_routes, game_routes, debug_routes
 from web.auth import auth_manager
 from adapters.web_adapter import WebAdapter
 
@@ -54,6 +54,7 @@ async def health_check():
 app.include_router(user_routes.router)
 app.include_router(room_routes.router)
 app.include_router(game_routes.router)
+app.include_router(debug_routes.router)
 
 # 静态文件服务
 @app.get("/")
@@ -97,6 +98,7 @@ def init_web_adapter(game_server):
     # 设置路由模块的引用
     game_routes.set_web_adapter(web_adapter)
     room_routes.set_game_state(game_instance)
+    debug_routes.set_game_state(game_instance)
     
     logger.info("Web适配器已初始化")
     return web_adapter
