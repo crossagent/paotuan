@@ -162,9 +162,13 @@ class TestRoomManagement(unittest.TestCase):
         try:
             # 创建一个临时的API客户端，模拟房主
             host_api_client = ApiClient()
-            # 登录为测试玩家1（房主）
-            success = host_api_client.login("test_player_1", "password")
+            # 登录为测试管理员（使用不同的用户ID避免冲突）
+            success = host_api_client.login("test_admin", "password")
             self.assertTrue(success, "房主登录失败")
+            
+            # 确保房主已经加入房间
+            join_result = host_api_client.join_room(room_id)
+            self.assertIsNotNone(join_result, "房主加入房间失败")
             
             # 房主离开房间
             leave_result = host_api_client.leave_room(room_id)
