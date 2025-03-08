@@ -52,7 +52,7 @@ async def reset_game_state(current_user: User = Depends(get_current_user)):
         )
     
     # 清空房间
-    game_state_service.game_state.rooms = []
+    game_state_service.game_state.rooms = {}
     game_state_service.game_state.player_room_map = {}
     game_state_service.game_state.player_character_map = {}
     
@@ -92,7 +92,7 @@ async def create_test_room(
         player_id = f"test_player_{i}"
         player_name = f"测试玩家{i}"
         player = Player(id=player_id, name=player_name, is_ready=all_ready)
-        room_controller.add_player(player)
+        room_controller.add_player(player_id, player_name)
         game_state_service.register_player_room(player_id, room.id)
     
     logger.info(f"创建测试房间: {room_name} (ID: {room.id}), 玩家数量: {player_count}, 全部准备: {all_ready}")
