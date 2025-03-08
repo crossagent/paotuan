@@ -9,4 +9,4 @@ python-jose
 passlib
 PyJWT
 python-multipart
-bcrypt
+bcrypt==3.2.0

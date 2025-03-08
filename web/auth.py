@@ -5,9 +5,9 @@ from passlib.context import CryptContext
 from pydantic import BaseModel
 import uuid
 import logging
-import json
 import os
 from pathlib import Path
+from persistence.user_repository import UserRepository
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -19,9 +19,6 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "your-secret-key-for-jwt")  # 生产环境应使用环境变量
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24小时
-
-# 用户数据文件路径
-USER_DATA_FILE = "web/data/users.json"
 
 # 确保数据目录存在
 Path("web/data").mkdir(parents=True, exist_ok=True)
@@ -57,69 +54,57 @@ class AuthManager:
     """认证管理器"""
     
     def __init__(self):
-        self.users: Dict[str, User] = {}
-        self.load_users()
+        # 初始化用户仓库
+        self.user_repository = UserRepository()
+        # 尝试迁移现有JSON数据到SQLite
+        self._migrate_data_if_needed()
     
-    def load_users(self) -> None:
-        """从文件加载用户数据"""
+    def _migrate_data_if_needed(self) -> None:
+        """如果需要，将JSON数据迁移到SQLite"""
         try:
-            if os.path.exists(USER_DATA_FILE):
-                with open(USER_DATA_FILE, 'r', encoding='utf-8') as f:
-                    user_data = json.load(f)
-                    for user_dict in user_data:
-                        user = User(**user_dict)
-                        self.users[user.id] = user
-                logger.info(f"已加载 {len(self.users)} 个用户")
-            else:
-                logger.info("用户数据文件不存在，将创建新文件")
-                self.save_users()
+            self.user_repository.migrate_from_json()
+            logger.info("用户数据迁移检查完成")
         except Exception as e:
-            logger.error(f"加载用户数据失败: {str(e)}")
-    
-    def save_users(self) -> None:
-        """保存用户数据到文件"""
-        try:
-            user_data = [user.dict() for user in self.users.values()]
-            with open(USER_DATA_FILE, 'w', encoding='utf-8') as f:
-                json.dump(user_data, f, ensure_ascii=False, default=str)
-            logger.info(f"已保存 {len(self.users)} 个用户")
-        except Exception as e:
-            logger.error(f"保存用户数据失败: {str(e)}")
+            logger.error(f"迁移用户数据失败: {str(e)}")
     
     def get_user_by_username(self, username: str) -> Optional[User]:
         """通过用户名获取用户"""
-        for user in self.users.values():
-            if user.username == username:
-                return user
+        user_data = self.user_repository.get_user_by_username(username)
+        if user_data:
+            return User(**user_data)
         return None
     
     def get_user_by_id(self, user_id: str) -> Optional[User]:
         """通过ID获取用户"""
-        return self.users.get(user_id)
+        user_data = self.user_repository.get_user_by_id(user_id)
+        if user_data:
+            return User(**user_data)
+        return None
     
     def create_user(self, user_create: UserCreate) -> User:
         """创建新用户"""
-        # 检查用户名是否已存在
-        if self.get_user_by_username(user_create.username):
-            raise ValueError(f"用户名 '{user_create.username}' 已存在")
-            
-        # 创建用户
-        user_id = str(uuid.uuid4())
+        # 哈希密码
         hashed_password = pwd_context.hash(user_create.password)
         
-        user = User(
-            id=user_id,
-            username=user_create.username,
-            email=user_create.email,
-            hashed_password=hashed_password
-        )
+        # 准备用户数据
+        user_data = {
+            "id": str(uuid.uuid4()),
+            "username": user_create.username,
+            "email": user_create.email,
+            "hashed_password": hashed_password,
+            "created_at": datetime.now().isoformat(),
+            "is_active": True
+        }
         
-        # 保存用户
-        self.users[user_id] = user
-        self.save_users()
-        
-        logger.info(f"创建新用户: {user.username} (ID: {user.id})")
-        return user
+        # 创建用户
+        try:
+            created_user_data = self.user_repository.create_user(user_data)
+            user = User(**created_user_data)
+            logger.info(f"创建新用户: {user.username} (ID: {user.id})")
+            return user
+        except ValueError as e:
+            # 重新抛出异常，保持与原有API一致
+            raise ValueError(str(e))
     
     def authenticate_user(self, username: str, password: str) -> Optional[User]:
         """验证用户"""
@@ -129,6 +114,42 @@ class AuthManager:
         if not pwd_context.verify(password, user.hashed_password):
             return None
         return user
+    
+    def update_user(self, user_id: str, user_data: Dict[str, Any]) -> Optional[User]:
+        """
+        更新用户信息
+        
+        Args:
+            user_id (str): 用户ID
+            user_data (Dict[str, Any]): 要更新的用户数据
+            
+        Returns:
+            Optional[User]: 更新后的用户，如果用户不存在则返回None
+        """
+        # 如果包含密码字段，需要哈希处理
+        if 'password' in user_data:
+            user_data['hashed_password'] = pwd_context.hash(user_data.pop('password'))
+        
+        try:
+            updated_user_data = self.user_repository.update_user(user_id, user_data)
+            if updated_user_data:
+                return User(**updated_user_data)
+            return None
+        except ValueError as e:
+            # 重新抛出异常，保持与原有API一致
+            raise ValueError(str(e))
+    
+    def delete_user(self, user_id: str) -> bool:
+        """
+        删除用户
+        
+        Args:
+            user_id (str): 用户ID
+            
+        Returns:
+            bool: 是否成功删除
+        """
+        return self.user_repository.delete_user(user_id)
     
     def create_access_token(self, user: User) -> Token:
         """创建访问令牌"""

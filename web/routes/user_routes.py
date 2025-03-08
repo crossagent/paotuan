@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 from web.auth import auth_manager, User, UserCreate, UserLogin, Token
 
@@ -76,3 +76,54 @@ async def read_users_me(current_user: User = Depends(get_current_user)):
         "created_at": current_user.created_at,
         "is_active": current_user.is_active
     }
+
+# 更新用户信息
+@router.put("/me", response_model=dict)
+async def update_user_me(user_data: Dict[str, Any], current_user: User = Depends(get_current_user)):
+    """更新当前用户信息"""
+    try:
+        updated_user = auth_manager.update_user(current_user.id, user_data)
+        if not updated_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="用户不存在"
+            )
+        return {
+            "id": updated_user.id,
+            "username": updated_user.username,
+            "email": updated_user.email,
+            "created_at": updated_user.created_at,
+            "is_active": updated_user.is_active
+        }
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+# 管理员路由：获取所有用户
+@router.get("/admin/all", response_model=List[dict])
+async def get_all_users(current_user: User = Depends(get_current_user)):
+    """获取所有用户（管理员功能）"""
+    # 这里可以添加管理员权限检查
+    users = auth_manager.user_repository.get_all_users()
+    return [{
+        "id": user["id"],
+        "username": user["username"],
+        "email": user["email"],
+        "created_at": user["created_at"],
+        "is_active": bool(user["is_active"])
+    } for user in users]
+
+# 管理员路由：删除用户
+@router.delete("/admin/{user_id}", response_model=dict)
+async def delete_user(user_id: str, current_user: User = Depends(get_current_user)):
+    """删除用户（管理员功能）"""
+    # 这里可以添加管理员权限检查
+    success = auth_manager.delete_user(user_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="用户不存在"
+        )
+    return {"message": "用户已删除", "user_id": user_id}
