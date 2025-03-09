@@ -228,7 +228,13 @@ async def join_room(
     room_context = RoomContext(room)
     
     # 将玩家添加到房间
-    player, _ = await room_service.add_player_to_room(room_context, current_user.id, current_user.username)
+    try:
+        player, _ = await room_service.add_player_to_room(room_context, current_user.id, current_user.username)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
     
     logger.info(f"玩家加入房间: {current_user.username} (ID: {current_user.id}), 房间: {room.name} (ID: {room_id})")
     

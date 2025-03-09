@@ -162,9 +162,10 @@ class TestRoomManagement(unittest.TestCase):
         # 成员2尝试加入房间（应该失败，因为已达到最大玩家数）
         try:
             join_result2 = member2_client.join_room(room_id)
+            # 如果执行到这里，说明没有抛出异常，这是不对的
             self.fail("超出最大玩家数限制仍能加入房间")
         except Exception as e:
-            # 预期会抛出异常
+            # 预期会抛出异常，直接检查异常消息
             self.assertIn("已达到最大玩家数", str(e), "错误消息不正确")
     
     def test_host_transfer(self):

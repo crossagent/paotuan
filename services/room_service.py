@@ -61,7 +61,15 @@ class RoomService:
             
         Returns:
             Tuple[Player, List[Dict[str, str]]]: (添加的玩家, 通知消息列表)
+            
+        Raises:
+            ValueError: 当房间已达到最大玩家数时抛出
         """
+        # 检查房间是否已达到最大玩家数
+        if len(room_context.room.players) >= room_context.room.max_players:
+            logger.warning(f"房间 {room_context.room.name} (ID: {room_context.room.id}) 已达到最大玩家数 {room_context.room.max_players}")
+            raise ValueError("已达到最大玩家数")
+            
         # 使用RoomContext添加玩家
         player = room_context.add_player(player_id, player_name)
         
