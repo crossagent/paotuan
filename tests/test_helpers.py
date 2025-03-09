@@ -28,22 +28,6 @@ class TestHelpers:
             self.logger.exception(f"重置服务器状态失败: {str(e)}")
             return False
     
-    def create_test_room(self, name: str = "测试房间", player_count: int = 3, all_ready: bool = False) -> Optional[Dict[str, Any]]:
-        """创建测试房间
-        
-        Args:
-            name: 房间名称
-            player_count: 玩家数量
-            all_ready: 是否所有玩家都准备
-            
-        Returns:
-            Optional[Dict[str, Any]]: 创建的房间信息，失败时返回None
-        """
-        try:
-            return self.api_client.create_test_room(name, player_count, all_ready)
-        except Exception as e:
-            self.logger.exception(f"创建测试房间失败: {str(e)}")
-            return None
     
     def create_test_game(self, room_id: str, scenario_id: str = "asylum", scene: str = "默认场景") -> Optional[Dict[str, Any]]:
         """创建测试游戏
@@ -166,6 +150,100 @@ class TestHelpers:
             self.logger.exception(f"模拟DM回合失败: {str(e)}")
             return None
     
+    def ensure_test_users(self, user_count: int = 10) -> List[Dict[str, Any]]:
+        """确保存在足够数量的测试用户
+        
+        Args:
+            user_count (int): 需要确保的测试用户数量
+            
+        Returns:
+            List[Dict[str, Any]]: 测试用户列表
+        """
+        from web.auth import auth_manager, UserCreate
+        
+        # 预定义密码
+        password = "testpassword"
+        test_users = []
+        
+        # 检查并创建测试用户
+        for i in range(1, user_count + 1):
+            username = f"test_user{i}"
+            
+            # 检查用户是否存在
+            user = auth_manager.get_user_by_username(username)
+            
+            if not user:
+                # 创建新用户
+                try:
+                    user_create = UserCreate(
+                        username=username,
+                        email=f"{username}@example.com",
+                        password=password
+                    )
+                    user = auth_manager.create_user(user_create)
+                    self.logger.info(f"创建测试用户: {username}")
+                except Exception as e:
+                    self.logger.error(f"创建测试用户 {username} 失败: {str(e)}")
+                    continue
+            else:
+                # 确保密码正确（可能已存在的用户密码不是我们期望的）
+                try:
+                    auth_result = auth_manager.authenticate_user(username, password)
+                    if not auth_result:
+                        # 如果密码不正确，更新用户密码
+                        from passlib.context import CryptContext
+                        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+                        hashed_password = pwd_context.hash(password)
+                        
+                        auth_manager.user_repository.update_user(user.id, {
+                            "hashed_password": hashed_password
+                        })
+                        self.logger.info(f"更新测试用户密码: {username}")
+                except Exception as e:
+                    self.logger.error(f"验证/更新测试用户 {username} 密码失败: {str(e)}")
+            
+            # 添加到测试用户列表
+            if user:
+                test_users.append({
+                    "id": user.id,
+                    "username": username,
+                    "is_active": True
+                })
+        
+        return test_users
+    
+    def get_multiple_user_clients(self, user_count: int = 3) -> List[ApiClient]:
+        """获取多个用户的API客户端实例
+        
+        Args:
+            user_count: 需要的用户数量
+            
+        Returns:
+            List[ApiClient]: API客户端实例列表
+        """
+        try:
+            # 确保有足够的测试用户
+            test_users = self.ensure_test_users(max(user_count, 10))
+            if len(test_users) < user_count:
+                self.logger.warning(f"可用测试用户数量不足，需要{user_count}个，但只有{len(test_users)}个")
+            
+            # 为每个测试用户创建API客户端实例并登录
+            clients = []
+            password = "testpassword"  # 测试用户统一密码
+            
+            for user in test_users[:user_count]:
+                client = ApiClient()
+                # 记录用户名便于后续验证
+                client.username = user["username"]
+                success = client.login(user["username"], password)
+                if success:
+                    clients.append(client)
+            
+            return clients
+        except Exception as e:
+            self.logger.exception(f"获取多个用户客户端失败: {str(e)}")
+            return []
+    
     def setup_complete_game(self, room_name: str = "测试房间", player_count: int = 3, 
                            scenario_id: str = "asylum", scene: str = "默认场景") -> Tuple[Optional[str], Optional[str], List[str]]:
         """设置完整的游戏环境，包括创建房间、游戏和初始回合
@@ -184,29 +262,57 @@ class TestHelpers:
             self.logger.error("重置服务器状态失败")
             return None, None, []
         
-        # 创建测试房间
-        room_result = self.create_test_room(room_name, player_count, True)
-        if not room_result:
-            self.logger.error("创建测试房间失败")
+        # 获取多个用户客户端
+        clients = self.get_multiple_user_clients(player_count)
+        if len(clients) < player_count:
+            self.logger.error(f"可用用户数量不足，需要{player_count}个，但只有{len(clients)}个")
             return None, None, []
         
-        room_id = room_result.get("id")
-        player_ids = [p.get("id") for p in room_result.get("players", [])]
-        
-        # 创建测试游戏
-        game_result = self.create_test_game(room_id, scenario_id, scene)
-        if not game_result:
-            self.logger.error("创建测试游戏失败")
-            return room_id, None, player_ids
-        
-        match_id = game_result.get("match_id")
-        
-        # 创建初始DM回合
-        turn_result = self.create_test_dm_turn(room_id, "游戏开始，欢迎来到测试世界！")
-        if not turn_result:
-            self.logger.error("创建初始DM回合失败")
-        
-        return room_id, match_id, player_ids
+        # 使用第一个用户创建房间
+        host_client = clients[0]
+        try:
+            room_result = host_client.create_room(room_name)
+            if not room_result:
+                self.logger.error("创建房间失败")
+                return None, None, []
+            
+            room_id = room_result.get("id")
+            
+            # 其他用户加入房间
+            for i in range(1, len(clients)):
+                join_result = clients[i].join_room(room_id)
+                if not join_result:
+                    self.logger.error(f"用户{i}加入房间失败")
+                    return None, None, []
+            
+            # 所有用户设置准备状态
+            for client in clients:
+                ready_result = client.set_ready(room_id, True)
+                if not ready_result:
+                    self.logger.error(f"用户{client.username}设置准备状态失败")
+                    return None, None, []
+            
+            # 获取房间信息，提取玩家ID
+            room = host_client.get_room(room_id)
+            player_ids = [p.get("id") for p in room.get("players", [])]
+            
+            # 创建测试游戏
+            game_result = self.create_test_game(room_id, scenario_id, scene)
+            if not game_result:
+                self.logger.error("创建测试游戏失败")
+                return room_id, None, player_ids
+            
+            match_id = game_result.get("match_id")
+            
+            # 创建初始DM回合
+            turn_result = self.create_test_dm_turn(room_id, "游戏开始，欢迎来到测试世界！")
+            if not turn_result:
+                self.logger.error("创建初始DM回合失败")
+            
+            return room_id, match_id, player_ids
+        except Exception as e:
+            self.logger.exception(f"设置完整游戏环境失败: {str(e)}")
+            return None, None, []
     
     def wait_for_turn_completion(self, room_id: str, timeout: int = 30) -> bool:
         """等待当前回合完成

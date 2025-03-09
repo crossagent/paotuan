@@ -284,23 +284,6 @@ class ApiClient:
         """
         return self._request("POST", "/api/debug/reset")
     
-    def create_test_room(self, name: str = "测试房间", player_count: int = 3, all_ready: bool = False) -> Dict[str, Any]:
-        """创建测试房间
-        
-        Args:
-            name: 房间名称
-            player_count: 玩家数量
-            all_ready: 是否所有玩家都准备
-            
-        Returns:
-            Dict[str, Any]: 创建结果
-        """
-        data = {
-            "name": name,
-            "player_count": player_count,
-            "all_ready": all_ready
-        }
-        return self._request("POST", "/api/debug/create_test_room", data)
     
     def create_test_game(self, room_id: str, scenario_id: str = "asylum", scene: str = "默认场景", status: str = "RUNNING") -> Dict[str, Any]:
         """创建测试游戏
@@ -349,6 +332,14 @@ class ApiClient:
             Dict[str, Any]: 完整游戏状态
         """
         return self._request("GET", "/api/debug/game_state")
+    
+    def get_all_users(self) -> List[Dict[str, Any]]:
+        """获取所有用户列表
+        
+        Returns:
+            List[Dict[str, Any]]: 用户列表
+        """
+        return self._request("GET", "/api/users/admin/all")
     
     def simulate_player_action(self, room_id: str, player_id: str, action: str, roll: Optional[int] = None) -> Dict[str, Any]:
         """模拟玩家行动

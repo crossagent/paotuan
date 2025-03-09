@@ -63,46 +63,6 @@ async def reset_game_state(current_user: User = Depends(get_current_user)):
         "message": "游戏状态已重置"
     }
 
-# 创建测试房间
-@router.post("/create_test_room", response_model=Dict[str, Any])
-async def create_test_room(
-    room_data: Dict[str, Any] = Body(...),
-    current_user: User = Depends(get_current_user)
-):
-    """创建测试房间，可以指定房间名称、玩家数量等"""
-    if not game_state_service or not room_service:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="游戏服务器未启动"
-        )
-    
-    room_name = room_data.get("name", "测试房间")
-    player_count = room_data.get("player_count", 3)
-    all_ready = room_data.get("all_ready", False)
-    
-    # 创建房间
-    from core.contexts.room_context import RoomContext
-    
-    # 使用RoomService创建房间
-    room_context, messages = await room_service.create_room(room_name, current_user.id)
-    room = room_context.room
-    
-    # 添加测试玩家
-    for i in range(1, player_count):
-        player_id = f"test_player_{i}"
-        player_name = f"测试玩家{i}"
-        player = Player(id=player_id, name=player_name, is_ready=all_ready)
-        room_context.add_player(player_id, player_name)
-        game_state_service.update_player_room_mapping(player_id, room.id)
-    
-    logger.info(f"创建测试房间: {room_name} (ID: {room.id}), 玩家数量: {player_count}, 全部准备: {all_ready}")
-    
-    return {
-        "id": room.id,
-        "name": room.name,
-        "player_count": len(room.players),
-        "players": [{"id": p.id, "name": p.name, "is_ready": p.is_ready} for p in room.players]
-    }
 
 # 创建测试游戏
 @router.post("/create_test_game", response_model=Dict[str, Any])
