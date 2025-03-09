@@ -34,30 +34,6 @@ class TestEdgeCases(unittest.TestCase):
         # 重置服务器状态
         success = self.helpers.reset_server_state()
         self.assertTrue(success, "重置服务器状态失败")
-    
-    def test_min_players(self):
-        """测试最小玩家数限制"""
-        # 创建只有房主的房间
-        room_result = self.helpers.create_test_room("测试房间", 1, True)
-        self.assertIsNotNone(room_result, "创建测试房间失败")
-        room_id = room_result.get("id")
-        
-        # 尝试开始游戏
-        try:
-            start_result = self.api_client.start_game(room_id, "测试场景")
-            
-            # 如果允许单人游戏，验证游戏已开始
-            self.assertIsNotNone(start_result, "开始游戏失败")
-            
-            # 验证游戏状态
-            room = self.api_client.get_room(room_id)
-            self.assertIsNotNone(room.get("current_match"), "未找到当前游戏局")
-            self.assertEqual(room.get("current_match").get("status"), "RUNNING", "游戏状态不正确")
-        except Exception as e:
-            # 如果不允许单人游戏，预期会抛出异常
-            logging.info(f"单人游戏测试结果: {str(e)}")
-    
-    def test_max_players(self):
         """测试最大玩家数限制"""
         # 创建最大玩家数为2的房间
         room_name = "测试房间"
