@@ -53,7 +53,7 @@ class RoomService:
     
     async def add_player_to_room(self, room_context: RoomContext, player_id: str, player_name: str) -> Tuple[Player, List[Dict[str, str]]]:
         """添加玩家到房间
-        
+        @
         Args:
             room_context: RoomContext - 房间控制器
             player_id: str - 玩家ID
@@ -72,6 +72,9 @@ class RoomService:
             
         # 使用RoomContext添加玩家
         player = room_context.add_player(player_id, player_name)
+        
+        # 确保玩家的ready状态为false，即使之前是true
+        room_context.set_player_ready(player_id, False)
         
         # 更新玩家-房间映射
         self.game_state_service.update_player_room_mapping(player_id, room_context.room.id)
@@ -188,6 +191,11 @@ class RoomService:
         Returns:
             Tuple[bool, List[Dict[str, str]]]: (是否设置成功, 通知消息列表)
         """
+        # 检查玩家是否是房主，房主不需要准备，也不允许设置准备状态
+        host = room_context.get_host()
+        if host and host.id == player_id:
+            return False, [{"recipient": player_id, "content": "房主不需要准备，也不允许设置准备状态"}]
+            
         # 使用RoomContext设置玩家准备状态
         success = room_context.set_player_ready(player_id, is_ready)
         

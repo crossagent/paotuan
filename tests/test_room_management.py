@@ -307,11 +307,11 @@ class TestRoomManagement(unittest.TestCase):
             # 预期会抛出异常
             self.assertIn("玩家未准备好", str(e), "错误消息不正确")
         
-        # 4. 场景二：所有玩家都准备好，尝试开始游戏（应成功）
+        # 4. 场景二：所有非房主玩家都准备好，尝试开始游戏（应成功）
         
-        # 所有玩家都准备
-        host_client.set_ready(room_id, True)
-        member2_client.set_ready(room_id, True)
+        # 确保所有非房主玩家都准备
+        member1_client.set_ready(room_id, True)  # 确保成员1准备
+        member2_client.set_ready(room_id, True)  # 确保成员2准备
         
         # 验证所有玩家都已准备
         room = host_client.get_room(room_id)

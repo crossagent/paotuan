@@ -97,6 +97,19 @@ class MatchService:
             logger.warning(error_msg)
             return False, [{"recipient": room_context.room.host_id, "content": error_msg}]
         
+        # 检查除房主外的所有玩家是否都已准备好
+        players_not_ready = []
+        host_id = room_context.room.host_id
+        for player in room_context.list_players():
+            if player.id != host_id and not player.ready:
+                players_not_ready.append(player.name)
+                
+        if players_not_ready:
+            player_names = ", ".join(players_not_ready)
+            error_msg = f"无法开始游戏局: 以下玩家未准备好: {player_names}"
+            logger.warning(error_msg)
+            return False, [{"recipient": room_context.room.host_id, "content": error_msg}]
+        
         # 使用MatchContext开始游戏局
         success = match_context.start_match()
         
