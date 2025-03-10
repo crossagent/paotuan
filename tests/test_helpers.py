@@ -28,6 +28,53 @@ class TestHelpers:
             self.logger.exception(f"重置服务器状态失败: {str(e)}")
             return False
     
+    def create_test_room(self, name: str, player_count: int = 3, all_ready: bool = False) -> Optional[Dict[str, Any]]:
+        """创建测试房间，并可选择让多个玩家加入并准备
+        
+        Args:
+            name: 房间名称
+            player_count: 玩家数量（包括房主）
+            all_ready: 是否让所有玩家准备就绪
+            
+        Returns:
+            Optional[Dict[str, Any]]: 创建的房间信息，失败时返回None
+        """
+        try:
+            # 获取多个用户客户端
+            clients = self.get_multiple_user_clients(player_count)
+            if len(clients) < player_count:
+                self.logger.error(f"可用用户数量不足，需要{player_count}个，但只有{len(clients)}个")
+                return None
+            
+            # 使用第一个用户创建房间
+            host_client = clients[0]
+            room_result = host_client.create_room(name)
+            if not room_result:
+                self.logger.error("创建房间失败")
+                return None
+            
+            room_id = room_result.get("id")
+            
+            # 其他用户加入房间
+            for i in range(1, len(clients)):
+                join_result = clients[i].join_room(room_id)
+                if not join_result:
+                    self.logger.error(f"用户{i}加入房间失败")
+                    return None
+            
+            # 如果需要所有玩家准备就绪
+            if all_ready:
+                for client in clients:
+                    ready_result = client.set_ready(room_id, True)
+                    if not ready_result:
+                        self.logger.error(f"用户{client.username}设置准备状态失败")
+                        return None
+            
+            # 返回最新的房间信息
+            return host_client.get_room(room_id)
+        except Exception as e:
+            self.logger.exception(f"创建测试房间失败: {str(e)}")
+            return None
     
     def create_test_game(self, room_id: str, scenario_id: str = "asylum", scene: str = "默认场景") -> Optional[Dict[str, Any]]:
         """创建测试游戏

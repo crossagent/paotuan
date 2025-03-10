@@ -594,8 +594,7 @@ async def set_scenario(
         "message": f"已设置剧本: {scenario.name}",
         "scenario": {
             "id": scenario_id,
-            "name": scenario.name,
-            "description": scenario.description
+            "name": scenario.name
         }
     }
 
