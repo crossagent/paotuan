@@ -40,14 +40,14 @@ class AIService(ABC):
     """AI服务接口"""
     
     @abstractmethod
-    async def generate_narration(self, context: Dict[str, Any]) -> StoryResponse:
+    async def generate_narration(self, context: Dict[str, Any], scenario: Optional[Any] = None) -> StoryResponse:
         """生成叙事内容"""
         pass
 
 class OpenAIService(AIService):
     """使用OpenAI实现的AI服务"""
     
-    def __init__(self, config_path: str = "config/llm_settings.yaml"):
+    def __init__(self, config_path: str = "config/llm_settings.yaml", prompt_path: str = "ai/prompts/default_prompt.txt"):
         # 尝试从环境变量加载API密钥
         api_key = os.environ.get('OPENAI_API_KEY', '')
         model = os.environ.get('OPENAI_MODEL', '')
@@ -71,48 +71,37 @@ class OpenAIService(AIService):
         # 初始化输出解析器
         self.output_parser = PydanticOutputParser(pydantic_object=StoryResponse)
         
-        # 构建提示模板
-        self.prompt = ChatPromptTemplate.from_template(
-            template="""你是一个专业的跑团游戏主持人(DM)。
+        # 从文件加载提示模板
+        self.prompt = self._load_prompt_template(prompt_path)
+    
+    def _load_prompt_template(self, prompt_path: str) -> ChatPromptTemplate:
+        """从文件加载提示模板
+        
+        Args:
+            prompt_path: 提示模板文件路径
             
-            {scenario_info}
+        Returns:
+            加载的ChatPromptTemplate对象
             
-            当前场景：{current_scene}
-            玩家信息：{players}
-            玩家行动：{player_actions}
-            历史记录：{history}
-            {dice_results}
-
-            根据以上信息和剧本引导推进故事发展。请特别注意：
-            1. 始终按照剧本设定的方向发展故事
-            2. 清楚地描述玩家当前所处的位置及其细节
-            3. 提及当前位置可见的重要道具和NPC
-            4. 根据玩家收集的道具和当前位置判断剧情进度
-            5. 根据剧情节点提供适当的线索和挑战
-
-            【重要】你需要自动更新玩家的位置和物品：
-            1. 当玩家移动到新位置时，返回location_updates字段指定新位置
-            2. 当玩家获得或失去物品时，返回item_updates字段更新物品列表
-            3. 当剧情需要推进到下一个事件时，返回plot_progress字段
-
-            【重要】关于胜利和失败条件：
-            1. 持续评估玩家是否已达成胜利条件或失败条件
-            2. 如果玩家满足任一胜利条件，在narration中说明玩家获胜原因，并将游戏标记为结束
-            3. 如果玩家满足任一失败条件，在narration中说明玩家失败原因，并将游戏标记为结束
-            4. 当游戏结束时，需要在narration中明确标识"游戏结束"
-
-            【重要】关于判定：
-            1. 判定是一个重要且严肃的事件，不应频繁使用。
-            2. 只有在关键时刻、重大挑战或有显著风险的行动才需要判定。
-            3. 判定失败会导致玩家受到伤害，生命值会减少。
-            4. 会修改到属性或消耗物品的行为一定要进行判定。
-            5. 普通的移动、交谈、观察等低风险行为通常不需要判定。
-
-            注意：active_players字段必须使用玩家ID而不是玩家名称。有效的玩家ID列表：{player_ids}
-
-            {format_instructions}
-            """
-        )
+        Raises:
+            FileNotFoundError: 如果提示模板文件不存在
+            Exception: 如果加载提示模板失败
+        """
+        try:
+            # 检查文件是否存在
+            if not os.path.exists(prompt_path):
+                raise FileNotFoundError(f"提示模板文件 {prompt_path} 不存在")
+            
+            # 读取模板文件
+            with open(prompt_path, 'r', encoding='utf-8') as f:
+                template = f.read()
+            
+            # 创建ChatPromptTemplate
+            return ChatPromptTemplate.from_template(template=template)
+            
+        except Exception as e:
+            logger.exception(f"加载提示模板失败: {str(e)}")
+            raise
     
     async def generate_narration(self, context: Dict[str, Any], scenario: Optional[Any] = None) -> StoryResponse:
         """生成叙事内容"""

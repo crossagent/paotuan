@@ -142,4 +142,4 @@ def test_new_feature(self):
 - `/api/debug/simulate_player_action`: 模拟玩家行动
 - `/api/debug/simulate_dm_turn`: 模拟DM回合
 
-这些接口在`web/routes/debug_routes.py`中定义，并在`web/server.py`中注册。
+这些接口在`web/routes/gm_routes.py`中定义，并在`web/server.py`中注册。

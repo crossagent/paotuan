@@ -3,10 +3,12 @@ from typing import List, Dict, Any, Optional
 import logging
 import uuid
 from datetime import datetime
+import os
 
 from web.routes.user_routes import get_current_user
 from web.auth import User
 from models.entities import Room, Match, Player, Character, GameStatus, TurnType, TurnStatus, BaseTurn, DMTurn, ActionTurn, DiceTurn, NextTurnInfo
+from services.ai_service import OpenAIService
 
 # 创建路由器
 router = APIRouter(
@@ -24,6 +26,7 @@ room_service = None
 match_service = None
 turn_service = None
 event_bus = None
+ai_service = None
 
 # 设置游戏状态
 def set_game_state(game_state):
@@ -61,181 +64,6 @@ async def reset_game_state(current_user: User = Depends(get_current_user)):
     return {
         "success": True,
         "message": "游戏状态已重置"
-    }
-
-
-# 创建测试游戏
-@router.post("/create_test_game", response_model=Dict[str, Any])
-async def create_test_game(
-    game_data: Dict[str, Any] = Body(...),
-    current_user: User = Depends(get_current_user)
-):
-    """在指定房间中创建测试游戏，可以指定剧本、场景等"""
-    if not game_state_service or not room_service or not match_service:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="游戏服务器未启动"
-        )
-    
-    room_id = game_data.get("room_id")
-    if not room_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="必须指定房间ID"
-        )
-    
-    room = game_state_service.get_room(room_id)
-    if not room:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="房间不存在"
-        )
-    
-    scenario_id = game_data.get("scenario_id", "asylum")
-    scene = game_data.get("scene", "默认场景")
-    game_status = game_data.get("status", GameStatus.RUNNING)
-    
-    # 创建新游戏局
-    match_id = str(uuid.uuid4())
-    match = Match(id=match_id, room_id=room.id, scene=scene, created_at=datetime.now(), status=game_status)
-    
-    # 设置剧本
-    if scenario_id:
-        from utils.scenario_loader import ScenarioLoader
-        scenario_loader = ScenarioLoader()
-        scenario = scenario_loader.load_scenario(scenario_id)
-        if not scenario:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"剧本不存在: {scenario_id}"
-            )
-        match.scenario_id = scenario_id
-    
-    # 添加到房间
-    room.matches.append(match)
-    room.current_match_id = match_id
-    
-    # 为每个玩家创建角色
-    for i, player in enumerate(room.players):
-        character_id = str(uuid.uuid4())
-        character_name = f"角色{i+1}"
-        character = Character(id=character_id, name=character_name, player_id=player.id)
-        match.characters.append(character)
-        player.character_id = character_id
-        game_state_service.update_player_character_mapping(player.id, character_id)
-    
-    logger.info(f"创建测试游戏: 房间={room.name} (ID: {room_id}), 场景={scene}, 剧本ID={scenario_id}")
-    
-    return {
-        "match_id": match.id,
-        "status": match.status,
-        "scene": match.scene,
-        "scenario_id": match.scenario_id,
-        "characters": [{"id": c.id, "name": c.name, "player_id": c.player_id} for c in match.characters]
-    }
-
-# 创建测试回合
-@router.post("/create_test_turn", response_model=Dict[str, Any])
-async def create_test_turn(
-    turn_data: Dict[str, Any] = Body(...),
-    current_user: User = Depends(get_current_user)
-):
-    """在指定游戏中创建测试回合，可以指定回合类型、状态等"""
-    if not game_state_service or not match_service or not turn_service:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="游戏服务器未启动"
-        )
-    
-    room_id = turn_data.get("room_id")
-    if not room_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="必须指定房间ID"
-        )
-    
-    room = game_state_service.get_room(room_id)
-    if not room:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="房间不存在"
-        )
-    
-    if not room.current_match_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="房间没有进行中的游戏"
-        )
-    
-    # 获取当前游戏局
-    match = next((m for m in room.matches if m.id == room.current_match_id), None)
-    if not match:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="游戏不存在"
-        )
-    
-    turn_type = turn_data.get("turn_type", TurnType.DM)
-    turn_status = turn_data.get("status", TurnStatus.PENDING)
-    
-    # 创建回合
-    turn_id = str(uuid.uuid4())
-    
-    if turn_type == TurnType.DM:
-        narration = turn_data.get("narration", "这是一个测试DM回合")
-        turn = DMTurn(
-            id=turn_id,
-            turn_type=turn_type,
-            status=turn_status,
-            narration=narration
-        )
-        
-        # 设置下一回合信息
-        next_turn_type = turn_data.get("next_turn_type", TurnType.PLAYER)
-        active_players = turn_data.get("active_players", [p.id for p in room.players])
-        turn.next_turn_info = NextTurnInfo(
-            turn_type=next_turn_type,
-            active_players=active_players
-        )
-    
-    elif turn_type == TurnType.PLAYER:
-        active_players = turn_data.get("active_players", [p.id for p in room.players])
-        is_dice_turn = turn_data.get("is_dice_turn", False)
-        
-        if is_dice_turn:
-            difficulty = turn_data.get("difficulty", 10)
-            action_desc = turn_data.get("action_desc", "测试检定")
-            turn = DiceTurn(
-                id=turn_id,
-                turn_type=turn_type,
-                status=turn_status,
-                active_players=active_players,
-                difficulty=difficulty,
-                action_desc=action_desc
-            )
-        else:
-            turn = ActionTurn(
-                id=turn_id,
-                turn_type=turn_type,
-                status=turn_status,
-                active_players=active_players
-            )
-    
-    # 添加到游戏局
-    match.turns.append(turn)
-    match.current_turn_id = turn_id
-    
-    logger.info(f"创建测试回合: 类型={turn_type}, 状态={turn_status}, 游戏={match.id}")
-    
-    return {
-        "turn_id": turn.id,
-        "turn_type": turn.turn_type,
-        "status": turn.status,
-        "active_players": getattr(turn, "active_players", []) if turn_type == TurnType.PLAYER else [],
-        "next_turn_info": {
-            "turn_type": turn.next_turn_info.turn_type,
-            "active_players": turn.next_turn_info.active_players
-        } if turn.next_turn_info else None
     }
 
 # 获取游戏状态
@@ -473,133 +301,43 @@ async def simulate_player_action(
         "all_players_acted": all_acted
     }
 
-# 模拟DM回合
-@router.post("/simulate_dm_turn", response_model=Dict[str, Any])
-async def simulate_dm_turn(
-    dm_data: Dict[str, Any] = Body(...),
+# 设置AI提示模板
+@router.post("/set_ai_prompt", response_model=Dict[str, Any])
+async def set_ai_prompt(
+    prompt_data: Dict[str, Any] = Body(...),
     current_user: User = Depends(get_current_user)
 ):
-    """模拟DM回合，生成叙述并指定下一回合的活跃玩家"""
-    if not game_state_service or not turn_service:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="游戏服务器未启动"
-        )
+    """设置AI提示模板，可以指定使用哪个prompt文件"""
+    global ai_service
     
-    room_id = dm_data.get("room_id")
-    if not room_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="必须指定房间ID"
-        )
+    prompt_type = prompt_data.get("prompt_type", "default")
     
-    room = game_state_service.get_room(room_id)
-    if not room:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="房间不存在"
-        )
-    
-    if not room.current_match_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="房间没有进行中的游戏"
-        )
-    
-    # 获取当前游戏局
-    match = next((m for m in room.matches if m.id == room.current_match_id), None)
-    if not match:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="游戏不存在"
-        )
-    
-    if not match.current_turn_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="游戏没有当前回合"
-        )
-    
-    # 获取当前回合
-    turn = next((t for t in match.turns if t.id == match.current_turn_id), None)
-    if not turn:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="回合不存在"
-        )
-    
-    if turn.turn_type != TurnType.DM:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="当前不是DM回合"
-        )
-    
-    narration = dm_data.get("narration", "这是一个测试DM叙述")
-    next_turn_type = dm_data.get("next_turn_type", TurnType.PLAYER)
-    active_players = dm_data.get("active_players", [p.id for p in room.players])
-    is_dice_turn = dm_data.get("is_dice_turn", False)
-    
-    # 更新DM回合
-    from core.contexts.turn_context import TurnContext
-    turn_controller = TurnContext(turn)
-    
-    # 设置叙述
-    turn.narration = narration
-    
-    # 设置下一回合信息
-    turn.next_turn_info = NextTurnInfo(
-        turn_type=next_turn_type,
-        active_players=active_players
-    )
-    
-    # 完成当前回合
-    turn.status = TurnStatus.COMPLETED
-    turn.completed_at = datetime.now()
-    
-    # 创建下一个回合
-    next_turn_id = str(uuid.uuid4())
-    
-    if next_turn_type == TurnType.PLAYER:
-        if is_dice_turn:
-            difficulty = dm_data.get("difficulty", 10)
-            action_desc = dm_data.get("action_desc", "测试检定")
-            next_turn = DiceTurn(
-                id=next_turn_id,
-                turn_type=next_turn_type,
-                status=TurnStatus.PENDING,
-                active_players=active_players,
-                difficulty=difficulty,
-                action_desc=action_desc
-            )
-        else:
-            next_turn = ActionTurn(
-                id=next_turn_id,
-                turn_type=next_turn_type,
-                status=TurnStatus.PENDING,
-                active_players=active_players
-            )
+    # 确定prompt文件路径
+    if prompt_type == "test":
+        prompt_path = "ai/prompts/test_prompt.txt"
     else:
-        next_turn = DMTurn(
-            id=next_turn_id,
-            turn_type=next_turn_type,
-            status=TurnStatus.PENDING
+        prompt_path = "ai/prompts/default_prompt.txt"
+    
+    # 检查文件是否存在
+    if not os.path.exists(prompt_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"提示模板文件 {prompt_path} 不存在"
         )
     
-    # 添加到游戏局
-    match.turns.append(next_turn)
-    match.current_turn_id = next_turn_id
-    
-    logger.info(f"模拟DM回合: 叙述长度={len(narration)}, 下一回合类型={next_turn_type}, 活跃玩家={active_players}")
-    
-    return {
-        "success": True,
-        "narration": narration,
-        "next_turn": {
-            "id": next_turn.id,
-            "turn_type": next_turn.turn_type,
-            "active_players": getattr(next_turn, "active_players", []) if next_turn_type == TurnType.PLAYER else [],
-            "is_dice_turn": is_dice_turn,
-            "difficulty": getattr(next_turn, "difficulty", None) if is_dice_turn else None,
-            "action_desc": getattr(next_turn, "action_desc", None) if is_dice_turn else None
+    # 创建或重新初始化AI服务
+    try:
+        ai_service = OpenAIService(prompt_path=prompt_path)
+        logger.info(f"AI提示模板已切换为 {prompt_type} 模式，使用文件: {prompt_path}")
+        
+        return {
+            "success": True,
+            "message": f"AI提示模板已切换为 {prompt_type} 模式",
+            "prompt_path": prompt_path
         }
-    }
+    except Exception as e:
+        logger.exception(f"设置AI提示模板失败: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"设置AI提示模板失败: {str(e)}"
+        )
