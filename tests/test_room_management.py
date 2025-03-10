@@ -326,7 +326,8 @@ class TestRoomManagement(unittest.TestCase):
         # 验证所有非房主玩家都已准备
         room = host_client.get_room(room_id)
         self.assertTrue(room.get("all_players_ready"), "所有非房主玩家应该都已准备好")
-        
+
+
         # 房主开始游戏（应该成功）
         start_result = host_client.start_game(room_id)
         self.assertIsNotNone(start_result, "开始游戏失败")

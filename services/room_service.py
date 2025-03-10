@@ -25,18 +25,19 @@ class RoomService:
         self.game_state_service = game_state_service
         self.event_bus = event_bus
     
-    async def create_room(self, name: str, host_id: Optional[str] = None) -> Tuple[RoomContext, List[Dict[str, str]]]:
+    async def create_room(self, name: str, host_id: Optional[str] = None, default_scenario_id: Optional[str] = None) -> Tuple[RoomContext, List[Dict[str, str]]]:
         """创建新房间
         
         Args:
             name: str - 房间名称
             host_id: Optional[str] - 房主ID
+            default_scenario_id: Optional[str] - 默认剧本ID
             
         Returns:
             Tuple[RoomContext, List[Dict[str, str]]]: (房间控制器, 通知消息列表)
         """
         # 创建房间控制器
-        room_context = RoomContext.create_room(name, host_id)
+        room_context = RoomContext.create_room(name, host_id, default_scenario_id)
         
         # 注册房间到游戏实例
         self.game_state_service.register_room(room_context.room.id, room_context.room)

@@ -33,7 +33,7 @@ class MatchService:
         self.rule_engine = rule_engine or RuleEngine()
         self.event_bus = event_bus
     
-    async def create_match(self, room_context, scene: str = "新的冒险") -> Tuple[MatchContext, List[Dict[str, str]]]:
+    async def create_match(self, room_context: RoomContext, scene: str = "新的冒险") -> Tuple[MatchContext, List[Dict[str, str]]]:
         """创建新的游戏局
         
         Args:
@@ -69,7 +69,7 @@ class MatchService:
         logger.info(f"创建新游戏局: {scene} (ID: {match_context.match.id})")
         return match_context, messages
     
-    async def start_match(self, match_context: MatchContext, room_context) -> Tuple[bool, List[Dict[str, str]]]:
+    async def start_match(self, match_context: MatchContext, room_context:RoomContext) -> Tuple[bool, List[Dict[str, str]]]:
         """开始游戏局
         
         Args:
@@ -86,27 +86,11 @@ class MatchService:
             return False, [{"recipient": room_context.room.host_id, "content": error_msg}]
         
         # 检查所有玩家是否都已选择角色
-        players_without_characters = []
-        for player in room_context.list_players():
-            if not player.character_id:
-                players_without_characters.append(player.name)
+        all_selected, players_without_characters = await self.check_all_players_selected_character(match_context, room_context)
                 
-        if players_without_characters:
+        if not all_selected:
             player_names = ", ".join(players_without_characters)
             error_msg = f"无法开始游戏局: 以下玩家未选择角色: {player_names}"
-            logger.warning(error_msg)
-            return False, [{"recipient": room_context.room.host_id, "content": error_msg}]
-        
-        # 检查除房主外的所有玩家是否都已准备好
-        players_not_ready = []
-        host_id = room_context.room.host_id
-        for player in room_context.list_players():
-            if player.id != host_id and not player.ready:
-                players_not_ready.append(player.name)
-                
-        if players_not_ready:
-            player_names = ", ".join(players_not_ready)
-            error_msg = f"无法开始游戏局: 以下玩家未准备好: {player_names}"
             logger.warning(error_msg)
             return False, [{"recipient": room_context.room.host_id, "content": error_msg}]
         
@@ -430,6 +414,43 @@ class MatchService:
                 messages.append({"recipient": p.id, "content": select_message})
                 
         return True, f"成功选择角色: {character_name}", messages
+    
+    async def check_all_players_selected_character(self, match_context: MatchContext, room_context: RoomContext = None) -> Tuple[bool, List[str]]:
+        """检查是否所有玩家都已选择角色
+        
+        Args:
+            match_context: MatchContext - 游戏局控制器
+            room_context: RoomContext - 房间控制器，可选
+            
+        Returns:
+            Tuple[bool, List[str]]: (是否所有玩家都已选择角色, 未选择角色的玩家名称列表)
+        """
+        if not room_context:
+            # 如果没有提供房间控制器，尝试从游戏状态服务获取
+            room_id = None
+            for room in self.game_state_service.list_rooms():
+                if room.current_match_id == match_context.match.id:
+                    room_id = room.id
+                    break
+                    
+            if not room_id:
+                logger.warning(f"无法检查玩家角色选择状态: 找不到关联的房间")
+                return False, ["未知玩家"]
+                
+            room = self.game_state_service.get_room(room_id)
+            if not room:
+                logger.warning(f"无法检查玩家角色选择状态: 找不到房间 {room_id}")
+                return False, ["未知玩家"]
+                
+            room_context = RoomContext(room)
+            
+        # 检查所有玩家是否都已选择角色
+        players_without_characters = []
+        for player in room_context.list_players():
+            if not player.character_id:
+                players_without_characters.append(player.name)
+                
+        return len(players_without_characters) == 0, players_without_characters
     
     async def is_match_running(self, match_context: MatchContext) -> bool:
         """检查游戏局是否在运行中

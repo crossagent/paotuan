@@ -101,6 +101,40 @@ class SelectCharacterCommand(GameCommand):
         # 通知其他玩家
         messages.extend(notifications)
         
+        # 检查是否所有玩家都已选择角色
+        all_selected, players_without_characters = await match_service.check_all_players_selected_character(match_context)
+        
+        # 如果所有玩家都已选择角色，自动开始游戏
+        if all_selected and not await match_service.is_match_running(match_context):
+            logger.info(f"所有玩家已选择角色，自动开始游戏")
+            
+            # 通知所有玩家游戏即将开始
+            for player in room_context.list_players():
+                messages.append({
+                    "recipient": player.id,
+                    "content": "所有玩家已选择角色，游戏即将开始！"
+                })
+            
+            # 开始游戏
+            success, start_messages = await match_service.start_match(match_context, room_context)
+            if success:
+                messages.extend(start_messages)
+                
+                # 创建第一个DM回合
+                turn_service = self.service_provider.get_service(TurnService)
+                dm_turn_context, transition_messages = await turn_service.transition_to_dm_turn(match_context, room_context)
+                messages.extend(transition_messages)
+                
+                # 触发DM叙述事件
+                dm_narration_event = await turn_service.create_dm_narration_event(room_context.room.id)
+                messages.append(dm_narration_event)
+            else:
+                # 如果开始游戏失败，通知房主
+                messages.append({
+                    "recipient": room_context.room.host_id,
+                    "content": "自动开始游戏失败，请检查游戏状态"
+                })
+        
         return messages
 
 
@@ -174,9 +208,5 @@ class CharacterActionCommand(GameCommand):
         # 转换到DM回合
         dm_turn_context, transition_messages = await turn_service.transition_to_dm_turn(match_context, room_context)
         messages.extend(transition_messages)
-        
-        # 触发DM叙述事件
-        dm_narration_event = await turn_service.create_dm_narration_event(room_context.room.id)
-        messages.append(dm_narration_event)
         
         return messages

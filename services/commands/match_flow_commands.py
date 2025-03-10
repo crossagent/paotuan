@@ -36,62 +36,76 @@ class StartMatchCommand(GameCommand):
         if not room_context:
             return [{"recipient": player_id, "content": "你尚未加入任何房间，请先使用 /加入游戏 或 /加入房间 [房间ID] 加入房间"}]
         
+        # 检查是否为房主
+        if room_context.room.host_id != player_id:
+            return [{"recipient": player_id, "content": "只有房主才能开始游戏"}]
+        
         # 检查房间中是否有玩家
-        if not room_context.get_players():
+        if not room_context.list_players():
             logger.warning(f"开始游戏局失败: 房间中没有玩家")
             return [{"recipient": player_id, "content": "房间中没有玩家，无法开始游戏局"}]
         
         try:
+            # 获取房间中保存的剧本ID
+            room_scenario_id = room_context.get_scenario_id()
+            if not room_scenario_id:
+                return await self._send_scenario_list(player_id, "请先设置剧本再开始游戏局！")
+            
             # 获取或创建游戏局控制器
             match_context = await match_service.get_match_context(room_context)
             
-            # 如果没有游戏局，创建一个新的并提示设置剧本
-            if not match_context:
-                match_context, create_messages = await match_service.create_match(room_context, "新的冒险")
-                return await self._send_scenario_list(player_id, "已创建游戏局，请先设置剧本再开始游戏局！")
-            
             # 检查游戏是否已经在运行
-            if await match_service.is_match_running(match_context):
+            if match_context and await match_service.is_match_running(match_context):
                 logger.warning(f"无法开始新游戏局: 当前已有进行中的游戏局 ID={match_context.match.id}")
                 return [{"recipient": player_id, "content": f"无法开始游戏局: 当前已有进行中的游戏局"}]
             
-            # 检查是否已设置剧本
+            # 创建新的游戏局，使用房间中保存的剧本ID
+            if not match_context:
+                match_context, create_messages = await match_service.create_match(room_context, "新的冒险")
+                logger.info(f"为开始游戏创建新游戏局: ID={match_context.match.id}")
+            
+            # 设置剧本（确保使用房间中保存的剧本）
             if not match_context.match.scenario_id:
-                return await self._send_scenario_list(player_id, "请先设置剧本再开始游戏局！")
+                success, error_msg, scenario_messages = await match_service.set_scenario(match_context, room_context, room_scenario_id)
+                if not success:
+                    return [{"recipient": player_id, "content": f"设置剧本失败: {error_msg}"}]
                 
-            # 检查是否所有玩家都已选择角色
-            all_selected, players_without_characters = await match_service.check_all_players_selected_character(match_context)
-                    
-            if not all_selected:
-                # 如果有玩家未选择角色，提示选择角色
-                player_list = ", ".join(players_without_characters)
-                
-                # 加载可选角色列表
-                available_characters = await match_service.load_available_characters(match_context)
-                
-                # 构建可选角色列表消息
-                character_msg = "【可选角色】\n"
-                if available_characters:
-                    for char in available_characters:
-                        char_name = char.get("name", "未知")
-                        char_desc = char.get("description", "")
-                        char_type = "主要角色" if char.get("is_main", True) else "次要角色"
-                        character_msg += f"- {char_name} ({char_type}): {char_desc[:50]}...\n"
-                    character_msg += "\n使用 /选角色 [角色名] 选择你要扮演的角色"
-                else:
-                    character_msg += "当前剧本没有可选角色\n"
-                
-                return [
-                    {"recipient": player_id, "content": f"以下玩家尚未选择角色: {player_list}，请先选择角色再开始游戏局！"},
-                    {"recipient": player_id, "content": character_msg}
-                ]
+            # 加载可选角色列表
+            available_characters = await match_service.load_available_characters(match_context)
             
-            # 所有条件都满足，可以开始游戏
-            success, start_messages = await match_service.start_match(match_context, room_context)
-            if not success:
-                return [{"recipient": player_id, "content": "开始游戏局失败，请检查游戏状态"}]
+            # 构建可选角色列表消息
+            character_msg = "【可选角色】\n"
+            if available_characters:
+                for char in available_characters:
+                    char_name = char.get("name", "未知")
+                    char_desc = char.get("description", "")
+                    char_type = "主要角色" if char.get("is_main", True) else "次要角色"
+                    character_msg += f"- {char_name} ({char_type}): {char_desc[:50]}...\n"
+                character_msg += "\n使用 /选角色 [角色名] 选择你要扮演的角色"
+            else:
+                character_msg += "当前剧本没有可选角色\n"
             
-            return start_messages
+            # 获取所有玩家列表
+            all_players = room_context.list_players()
+            player_names = [p.name for p in all_players]
+            
+            # 向所有玩家广播游戏已创建和角色选择消息
+            messages = []
+            
+            # 通知房主
+            messages.append({
+                "recipient": player_id, 
+                "content": f"游戏局已创建，使用剧本: {room_scenario_id}。请所有玩家选择角色后游戏将自动开始。"
+            })
+            
+            # 向所有玩家广播角色选择消息
+            for player in all_players:
+                messages.append({
+                    "recipient": player.id,
+                    "content": f"房主已开始游戏，请选择你要扮演的角色。\n{character_msg}"
+                })
+            
+            return messages
             
         except ValueError as e:
             logger.error(f"创建游戏局失败: {str(e)}")
@@ -180,13 +194,20 @@ class SetScenarioCommand(GameCommand):
         if not room_context:
             return [{"recipient": player_id, "content": "你尚未加入任何房间，请先使用 /加入游戏 或 /加入房间 [房间ID] 加入房间"}]
         
+        # 检查是否为房主
+        if room_context.room.host_id != player_id:
+            return [{"recipient": player_id, "content": "只有房主才能设置剧本"}]
+        
+        # 设置房间的剧本
+        room_context.set_scenario(scenario_id)
+        
         # 获取或创建游戏局控制器
         match_context = await match_service.get_match_context(room_context)
         if not match_context:
             match_context, create_messages = await match_service.create_match(room_context, "新的冒险")
             logger.info(f"为设置剧本创建新游戏局: ID={match_context.match.id}")
         
-        # 设置剧本
+        # 设置游戏局的剧本
         success, error_msg, scenario_messages = await match_service.set_scenario(match_context, room_context, scenario_id)
         if not success:
             # 获取可用剧本列表并发送

@@ -41,16 +41,18 @@ class RoomContext:
             "host_id": self.room.host_id,
             "players": players,
             "current_match_id": self.room.current_match_id,
-            "created_at": self.room.created_at.isoformat() if self.room.created_at else None
+            "created_at": self.room.created_at.isoformat() if self.room.created_at else None,
+            "scenario_id": self.get_scenario_id()
         }
     
     @classmethod
-    def create_room(cls, name: str, host_id: Optional[str] = None) -> "RoomContext":
+    def create_room(cls, name: str, host_id: Optional[str] = None, default_scenario_id: Optional[str] = None) -> "RoomContext":
         """创建新房间
         
         Args:
             name: str - 房间名称
             host_id: Optional[str] - 房主ID
+            default_scenario_id: Optional[str] - 默认剧本ID
             
         Returns:
             RoomContext - 新创建的房间上下文
@@ -60,10 +62,11 @@ class RoomContext:
             id=room_id,
             name=name,
             host_id=host_id,
-            created_at=datetime.now()
+            created_at=datetime.now(),
+            settings={"scenario_id": default_scenario_id} if default_scenario_id else {}
         )
         
-        logger.info(f"创建新房间: ID={room_id}, 名称={name}")
+        logger.info(f"创建新房间: ID={room_id}, 名称={name}, 默认剧本={default_scenario_id or '无'}")
         
         return cls(new_room)
         
@@ -294,3 +297,23 @@ class RoomContext:
             if player.id == player_id:
                 return player
         return None
+        
+    def set_scenario(self, scenario_id: str) -> None:
+        """设置房间使用的剧本
+        
+        Args:
+            scenario_id: str - 剧本ID
+        """
+        if 'scenario_id' not in self.room.settings:
+            self.room.settings['scenario_id'] = scenario_id
+        else:
+            self.room.settings['scenario_id'] = scenario_id
+        logger.info(f"房间 {self.room.id} 设置剧本: {scenario_id}")
+    
+    def get_scenario_id(self) -> Optional[str]:
+        """获取房间使用的剧本ID
+        
+        Returns:
+            Optional[str] - 剧本ID，如果未设置则返回None
+        """
+        return self.room.settings.get('scenario_id')

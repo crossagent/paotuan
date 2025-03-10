@@ -447,6 +447,34 @@ class TurnService:
             
         return turn_context.turn.turn_type == TurnType.DM
     
+    async def is_player_turn(self, turn_context: TurnContext) -> bool:
+        """检查当前回合是否为玩家回合
+        
+        Args:
+            turn_context: TurnContext - 回合控制器
+            
+        Returns:
+            bool - 是否为DM回合
+        """
+        if not turn_context or not turn_context.turn:
+            return False
+            
+        return turn_context.turn.turn_type == TurnType.PLAYER
+    
+    async def is_turn_completed(self, turn_context: TurnContext) -> bool:
+        """检查当前回合是否为玩家回合
+        
+        Args:
+            turn_context: TurnContext - 回合控制器
+            
+        Returns:
+            bool - 是否为DM回合
+        """
+        if not turn_context or not turn_context.turn:
+            return False
+            
+        return turn_context.turn.status == TurnStatus.COMPLETED
+
     async def get_turn_context(self, match_context: MatchContext) -> Optional[TurnContext]:
         """获取当前回合控制器
         

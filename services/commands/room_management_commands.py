@@ -21,14 +21,15 @@ class CreateRoomCommand(GameCommand):
         """
         player_id = event.data["player_id"]
         room_name = event.data["room_name"]
+        default_scenario_id = event.data.get("scenario_id")  # 可选的默认剧本ID
         
-        logger.info(f"处理创建房间事件: 玩家ID={player_id}, 房间名称={room_name}")
+        logger.info(f"处理创建房间事件: 玩家ID={player_id}, 房间名称={room_name}, 默认剧本ID={default_scenario_id or '无'}")
         
         # 获取房间服务
         room_service:RoomService = self.service_provider.get_service(RoomService)
         
         # 创建新房间
-        room_context, msgs = await room_service.create_room(room_name)
+        room_context, msgs = await room_service.create_room(room_name, player_id, default_scenario_id)
         
         # 拼接消息列表中的所有消息内容（假设每个字典都有 "content" 字段）
         extra_messages = " ".join(msg.get("content", "") for msg in msgs)
@@ -144,15 +145,29 @@ class LeaveRoomCommand(GameCommand):
             # 获取房间服务
             room_service = self.service_provider.get_service(RoomService)
             
-            # 如果房间为空，自动关闭房间
-            if room_empty and room_id:
-                logger.info(f"自动关闭空房间: {room_id}")
-                await room_service.close_room(room_id)
+            # 获取房间控制器
+            room_context = await room_service.get_room_context(room_id)
+
+            # 从房间中移除玩家
+            result, msg = await room_service.remove_player_from_room(room_context, player_id)
                 
-                # 通知玩家房间已关闭
-                return [{"recipient": player_id, "content": f"房间已自动关闭: {room_id}"}]
-                
-            return []
+            # 如果房间为空，通知所有人房间已关闭；否则只给离开的玩家和房间内其他玩家发送不同消息
+            if room_empty:
+                return [{
+                    "recipient": "room", 
+                    "content": f"房间 {room_id} 已空，已关闭。"
+                }]
+            else:
+                return [
+                    {
+                        "recipient": player_id, 
+                        "content": f"你已成功离开房间 {room_id}。"
+                    },
+                    {
+                        "recipient": "room",
+                        "content": f"玩家 {player_name} 已离开房间。"
+                    }
+                ]
         except Exception as e:
             logger.exception(f"处理玩家离开事件失败: {str(e)}")
             return []
