@@ -129,6 +129,8 @@ class RoomService:
             # 选择第一个加入的玩家作为新房主
             new_host = other_players[0]
             logger.info(f"房主离开，转移房主权限给: {new_host.name} (ID: {new_host.id})")
+            # 在移除玩家前设置新房主
+            room_context.set_host(new_host.id)
         
         # 使用RoomContext移除玩家
         removed_player = room_context.remove_player(player_id)
@@ -143,11 +145,7 @@ class RoomService:
         if removed_player.character_id:
             self.game_state_service.update_player_character_mapping(player_id, None)
         
-        # 如果是房主且房间有其他玩家，设置新房主
-        if was_host and room_context.room.players:
-            # 获取第一个玩家作为新房主
-            new_host_id = room_context.room.players[0].id
-            room_context.set_host(new_host_id)
+        # 房主已在移除前转移，不需要再次设置
             
         # 生成通知消息
         messages = []
