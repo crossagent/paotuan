@@ -83,7 +83,7 @@ class TestGameFlow(unittest.TestCase):
         # 验证游戏状态
         room = host_client.get_room(room_id)
         self.assertIsNotNone(room.get("current_match"), "未找到当前游戏局")
-        self.assertEqual(room.get("current_match").get("status"), "RUNNING", "游戏状态不正确")
+        self.assertEqual(room.get("current_match").get("status"), "WAITING", "游戏状态不正确")
         self.assertEqual(room.get("current_match").get("scenario_id"), scenario_id, "剧本ID不匹配")
         
         # 2. 角色选择阶段

@@ -54,10 +54,10 @@ class MatchService:
                     logger.warning(error_msg)
                     return None, [{"recipient": room_context.room.host_id, "content": error_msg}]
         
-        scene = room_context.get_scenario_id()
+        scenario_id = room_context.get_scenario_id()
 
         # 创建新游戏局
-        match_context = MatchContext.create_match(scene)
+        match_context = MatchContext.create_match(scenario_id)
         
         # 将游戏局添加到房间
         room_context.room.matches.append(match_context.match)

@@ -79,7 +79,7 @@ class MatchContext:
         }
     
     @classmethod
-    def create_match(cls, scene: str = "新的冒险") -> "MatchContext":
+    def create_match(cls, scenario_id: str = "") -> "MatchContext":
         """创建新的游戏局
         
         Args:
@@ -91,12 +91,12 @@ class MatchContext:
         match_id = str(uuid.uuid4())
         new_match = Match(
             id=match_id,
-            scene=scene,
+            scenario_id=scenario_id,
             created_at=datetime.now(),
             status=GameStatus.WAITING
         )
         
-        logger.info(f"创建新游戏局: ID={match_id}, 名称={scene}")
+        logger.info(f"创建新游戏局: ID={match_id}, 名称={scenario_id}")
         
         return cls(new_match)
     
