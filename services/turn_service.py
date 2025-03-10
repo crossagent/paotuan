@@ -1,7 +1,7 @@
 import logging
 from typing import List, Dict, Any, Optional, Union, Tuple
 
-from models.entities import TurnType, DMTurn, ActionTurn, DiceTurn, TurnStatus, GameStatus, Match, Character, BaseTurn
+from models.entities import TurnType, DMTurn, ActionTurn, DiceTurn, SystemTurn, SystemTurnType, TurnStatus, GameStatus, Match, Character, BaseTurn
 from core.contexts.turn_context import TurnContext
 from core.contexts.match_context import MatchContext
 from core.contexts.room_context import RoomContext
@@ -40,7 +40,7 @@ class TurnService:
             Tuple[bool, str]: (是否可以开始, 原因)
         """
         # 检查游戏状态
-        if match_context.match.status != GameStatus.RUNNING:
+        if match_context.match.status != GameStatus.RUNNING and turn_type != TurnType.SYSTEM:
             return False, f"游戏未在运行中，当前状态: {match_context.match.status}"
         
         # 获取当前回合
@@ -433,6 +433,120 @@ class TurnService:
                 
         return messages
     
+    async def transition_to_system_turn(self, match_context: MatchContext, room_context: RoomContext, 
+                                      system_type: SystemTurnType) -> Tuple[TurnContext, List[Dict[str, str]]]:
+        """转换到系统回合
+        
+        Args:
+            match_context: MatchContext - 游戏局控制器
+            room_context: RoomContext - 房间控制器
+            system_type: SystemTurnType - 系统回合类型
+            
+        Returns:
+            Tuple[TurnContext, List[Dict[str, str]]]: (新的系统回合控制器, 通知消息列表)
+        """
+        messages = []
+        
+        # 完成当前回合（如果有）
+        current_turn_id = match_context.match.current_turn_id
+        if current_turn_id:
+            for turn in match_context.match.turns:
+                if turn.id == current_turn_id and turn.status != TurnStatus.COMPLETED:
+                    turn_context = TurnContext(turn)
+                    turn_context.complete_turn(TurnType.SYSTEM)
+                    break
+        
+        # 创建新的系统回合
+        system_turn_context = TurnContext.create_system_turn(system_type)
+        
+        # 将回合添加到游戏局
+        match_context.match.turns.append(system_turn_context.turn)
+        match_context.set_current_turn(system_turn_context.turn.id)
+        
+        logger.info(f"创建新的系统回合: ID={system_turn_context.turn.id}, 类型={system_type}")
+        
+        # 根据系统回合类型生成不同的通知消息
+        if system_type == SystemTurnType.CHARACTER_SELECTION:
+            # 角色选择回合通知
+            for player in room_context.list_players():
+                messages.append({
+                    "recipient": player.id,
+                    "content": "游戏正在初始化，请选择你的角色。"
+                })
+        elif system_type == SystemTurnType.GAME_SUMMARY:
+            # 游戏总结回合通知
+            summary = self._generate_game_summary(match_context)
+            system_turn_context.set_system_data(summary)
+            
+            summary_message = "【游戏统计】\n" + summary.get("text", "游戏结束！")
+            for player in room_context.list_players():
+                messages.append({
+                    "recipient": player.id,
+                    "content": summary_message
+                })
+        
+        return system_turn_context, messages
+    
+    def _generate_game_summary(self, match_context: MatchContext) -> Dict[str, Any]:
+        """生成游戏总结数据
+        
+        Args:
+            match_context: MatchContext - 游戏局控制器
+            
+        Returns:
+            Dict[str, Any] - 游戏总结数据
+        """
+        # 统计游戏数据
+        total_turns = len(match_context.match.turns)
+        dm_turns = 0
+        player_turns = 0
+        system_turns = 0
+        dice_turns = 0
+        
+        for turn in match_context.match.turns:
+            if turn.turn_type == TurnType.DM:
+                dm_turns += 1
+            elif turn.turn_type == TurnType.PLAYER:
+                player_turns += 1
+                if hasattr(turn, 'dice_results'):
+                    dice_turns += 1
+            elif turn.turn_type == TurnType.SYSTEM:
+                system_turns += 1
+        
+        # 统计角色状态
+        characters_summary = []
+        for character in match_context.match.characters:
+            if character.player_id:  # 只统计玩家角色
+                characters_summary.append({
+                    "name": character.name,
+                    "health": character.health,
+                    "alive": character.alive,
+                    "player_id": character.player_id
+                })
+        
+        # 生成总结文本
+        summary_text = f"游戏结束！\n"
+        summary_text += f"总回合数: {total_turns}\n"
+        summary_text += f"DM回合数: {dm_turns}\n"
+        summary_text += f"玩家回合数: {player_turns}\n"
+        summary_text += f"掷骰子回合数: {dice_turns}\n"
+        
+        summary_text += "\n角色状态:\n"
+        for char in characters_summary:
+            summary_text += f"{char['name']}: 生命值 {char['health']}, {'存活' if char['alive'] else '死亡'}\n"
+        
+        return {
+            "text": summary_text,
+            "stats": {
+                "total_turns": total_turns,
+                "dm_turns": dm_turns,
+                "player_turns": player_turns,
+                "dice_turns": dice_turns,
+                "system_turns": system_turns
+            },
+            "characters": characters_summary
+        }
+    
     async def is_dm_turn(self, turn_context: TurnContext) -> bool:
         """检查当前回合是否为DM回合
         
@@ -454,21 +568,35 @@ class TurnService:
             turn_context: TurnContext - 回合控制器
             
         Returns:
-            bool - 是否为DM回合
+            bool - 是否为玩家回合
         """
         if not turn_context or not turn_context.turn:
             return False
             
         return turn_context.turn.turn_type == TurnType.PLAYER
     
-    async def is_turn_completed(self, turn_context: TurnContext) -> bool:
-        """检查当前回合是否为玩家回合
+    async def is_system_turn(self, turn_context: TurnContext) -> bool:
+        """检查当前回合是否为系统回合
         
         Args:
             turn_context: TurnContext - 回合控制器
             
         Returns:
-            bool - 是否为DM回合
+            bool - 是否为系统回合
+        """
+        if not turn_context or not turn_context.turn:
+            return False
+            
+        return turn_context.turn.turn_type == TurnType.SYSTEM
+    
+    async def is_turn_completed(self, turn_context: TurnContext) -> bool:
+        """检查当前回合是否已完成
+        
+        Args:
+            turn_context: TurnContext - 回合控制器
+            
+        Returns:
+            bool - 是否已完成
         """
         if not turn_context or not turn_context.turn:
             return False

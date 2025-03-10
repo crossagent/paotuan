@@ -14,6 +14,12 @@ class TurnType(str, Enum):
     """回合类型枚举"""
     DM = "DM"  # DM回合
     PLAYER = "PLAYER"  # 玩家回合
+    SYSTEM = "SYSTEM"  # 系统回合
+
+class SystemTurnType(str, Enum):
+    """系统回合类型枚举"""
+    CHARACTER_SELECTION = "CHARACTER_SELECTION"  # 角色选择回合
+    GAME_SUMMARY = "GAME_SUMMARY"  # 游戏总结回合
 
 class TurnStatus(str, Enum):
     """回合状态枚举"""
@@ -70,8 +76,13 @@ class DiceTurn(BaseTurn):
     action_desc: str  # 行动类型描述（如"攀爬"、"说服"等）
     dice_results: Dict[str, Dict[str, Any]] = {}  # 玩家ID -> {roll, success, difficulty, action}
 
+class SystemTurn(BaseTurn):
+    """系统回合模型，用于游戏开始的角色选择和游戏结束前的统计"""
+    system_type: SystemTurnType  # 系统回合的类型
+    data: Dict[str, Any] = {}  # 系统回合相关的数据
+
 # 为了向后兼容，保留Turn类，但使用Union类型
-Turn = Union[BaseTurn, DMTurn, ActionTurn, DiceTurn]
+Turn = Union[BaseTurn, DMTurn, ActionTurn, DiceTurn, SystemTurn]
 
 class Match(BaseModel):
     """游戏局模型"""
@@ -79,7 +90,7 @@ class Match(BaseModel):
     status: GameStatus = GameStatus.WAITING
     scene: str
     created_at: datetime = datetime.now()
-    turns: List[Union[BaseTurn, DMTurn, ActionTurn, DiceTurn]] = []
+    turns: List[Union[BaseTurn, DMTurn, ActionTurn, DiceTurn, SystemTurn]] = []
     current_turn_id: Optional[str] = None
     game_state: Dict[str, Any] = {}
     scenario_id: Optional[str] = None  # 关联的剧本ID

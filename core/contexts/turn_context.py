@@ -3,18 +3,18 @@ import uuid
 import logging
 from datetime import datetime
 
-from models.entities import BaseTurn, DMTurn, ActionTurn, DiceTurn, TurnType, TurnStatus, NextTurnInfo
+from models.entities import BaseTurn, DMTurn, ActionTurn, DiceTurn, SystemTurn, TurnType, TurnStatus, NextTurnInfo, SystemTurnType
 
 logger = logging.getLogger(__name__)
 
 class TurnContext:
     """回合上下文，提供Turn实体的上下文环境"""
     
-    def __init__(self, turn: Union[DMTurn, ActionTurn, DiceTurn]):
+    def __init__(self, turn: Union[DMTurn, ActionTurn, DiceTurn, SystemTurn]):
         """初始化回合上下文
         
         Args:
-            turn: Union[DMTurn, ActionTurn, DiceTurn] - 回合实体
+            turn: Union[DMTurn, ActionTurn, DiceTurn, SystemTurn] - 回合实体
         """
         self.turn = turn
         
@@ -45,6 +45,10 @@ class TurnContext:
             turn_info["difficulty"] = self.turn.difficulty
             turn_info["action_desc"] = self.turn.action_desc
             turn_info["dice_results"] = self.turn.dice_results
+            
+        elif isinstance(self.turn, SystemTurn):
+            turn_info["system_type"] = self.turn.system_type
+            turn_info["data"] = self.turn.data
             
         return turn_info
     
@@ -111,6 +115,28 @@ class TurnContext:
         )
         
         logger.info(f"创建新掷骰子回合: ID={turn_id}, 难度={difficulty}, 行动描述={action_desc}, 激活玩家数={len(active_players)}")
+        
+        return cls(new_turn)
+    
+    @classmethod
+    def create_system_turn(cls, system_type: SystemTurnType) -> "TurnContext":
+        """创建新的系统回合
+        
+        Args:
+            system_type: SystemTurnType - 系统回合类型
+            
+        Returns:
+            TurnContext - 新创建的回合上下文
+        """
+        turn_id = str(uuid.uuid4())
+        new_turn = SystemTurn(
+            id=turn_id,
+            turn_type=TurnType.SYSTEM,
+            system_type=system_type,
+            created_at=datetime.now()
+        )
+        
+        logger.info(f"创建新系统回合: ID={turn_id}, 类型={system_type}")
         
         return cls(new_turn)
     
@@ -244,7 +270,7 @@ class TurnContext:
         elif isinstance(self.turn, DiceTurn):
             return set(self.turn.dice_results.keys()) == set(self.turn.active_players)
         else:
-            return True  # 对于DM回合，总是返回True
+            return True  # 对于DM回合和系统回合，总是返回True
     
     def get_active_players(self) -> List[str]:
         """获取激活玩家列表
@@ -290,4 +316,26 @@ class TurnContext:
         """
         if isinstance(self.turn, DMTurn):
             return self.turn.narration
+        return None
+        
+    def set_system_data(self, data: Dict[str, Any]) -> None:
+        """设置系统回合的数据
+        
+        Args:
+            data: Dict[str, Any] - 系统回合数据
+        """
+        if isinstance(self.turn, SystemTurn):
+            self.turn.data = data
+            logger.info(f"设置系统回合 {self.turn.id} 的数据")
+        else:
+            logger.warning(f"无法设置系统数据: 当前回合不是系统回合")
+    
+    def get_system_data(self) -> Optional[Dict[str, Any]]:
+        """获取系统回合的数据
+        
+        Returns:
+            Optional[Dict[str, Any]] - 系统回合数据，如果不存在则返回None
+        """
+        if isinstance(self.turn, SystemTurn):
+            return self.turn.data
         return None

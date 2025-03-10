@@ -3,11 +3,13 @@ from typing import List, Dict, Any, Optional, Union, Tuple
 import uuid
 from datetime import datetime
 
-from models.entities import Room, Match, Player, Character, GameStatus
+from models.entities import Room, Match, Player, Character, GameStatus, SystemTurnType
 from core.contexts.match_context import MatchContext
 from core.contexts.character_context import CharacterContext
 from core.contexts.room_context import RoomContext
+from core.contexts.turn_context import TurnContext
 from services.game_state_service import GameStateService
+from services.turn_service import TurnService
 from utils.scenario_loader import ScenarioLoader
 from core.rules import RuleEngine
 from core.events import EventBus
@@ -19,7 +21,7 @@ class MatchService:
     
     def __init__(self, game_state_service: GameStateService, 
                 scenario_loader: ScenarioLoader = None, rule_engine: RuleEngine = None, 
-                event_bus: EventBus = None):
+                event_bus: EventBus = None, turn_service: TurnService = None):
         """初始化游戏局服务
         
         Args:
@@ -32,6 +34,7 @@ class MatchService:
         self.scenario_loader = scenario_loader or ScenarioLoader()
         self.rule_engine = rule_engine or RuleEngine()
         self.event_bus = event_bus
+        self.turn_service = turn_service
     
     async def create_match(self, room_context: RoomContext, scene: str = "新的冒险") -> Tuple[MatchContext, List[Dict[str, str]]]:
         """创建新的游戏局
@@ -102,8 +105,21 @@ class MatchService:
             logger.warning(error_msg)
             return False, [{"recipient": room_context.room.host_id, "content": error_msg}]
         
-        # 生成通知消息
+        # 创建角色选择系统回合
         messages = []
+        if self.turn_service:
+            # 创建角色选择系统回合
+            system_turn_context, system_messages = await self.turn_service.transition_to_system_turn(
+                match_context=match_context,
+                room_context=room_context,
+                system_type=SystemTurnType.CHARACTER_SELECTION
+            )
+            
+            # 完成系统回合
+            system_turn_context.complete_turn()
+            
+            # 添加系统回合的消息
+            messages.extend(system_messages)
         
         # 通知房间中的所有玩家
         start_message = f"游戏开始！剧本: {match_context.match.scenario_id}"
@@ -124,6 +140,22 @@ class MatchService:
         Returns:
             Tuple[bool, List[Dict[str, str]]]: (是否成功结束游戏局, 通知消息列表)
         """
+        # 创建游戏总结系统回合
+        messages = []
+        if self.turn_service:
+            # 创建游戏总结系统回合
+            system_turn_context, system_messages = await self.turn_service.transition_to_system_turn(
+                match_context=match_context,
+                room_context=room_context,
+                system_type=SystemTurnType.GAME_SUMMARY
+            )
+            
+            # 完成系统回合
+            system_turn_context.complete_turn()
+            
+            # 添加系统回合的消息
+            messages.extend(system_messages)
+        
         # 使用MatchContext结束游戏局
         success = match_context.end_match(result)
         
@@ -131,9 +163,6 @@ class MatchService:
             error_msg = "结束游戏局失败"
             logger.warning(error_msg)
             return False, [{"recipient": room_context.room.host_id, "content": error_msg}]
-        
-        # 生成通知消息
-        messages = []
         
         # 通知房间中的所有玩家
         end_message = f"游戏结束！" + (f"结果: {result}" if result else "")
