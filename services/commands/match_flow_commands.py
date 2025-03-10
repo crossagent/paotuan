@@ -58,11 +58,17 @@ class StartMatchCommand(GameCommand):
                 return [{"recipient": player_id, "content": f"无法开始游戏局: 当前已有进行中的游戏局"}]
             
             # 设置剧本（确保使用房间中保存的剧本）
+            if not room_scenario_id:
+                return await self._send_scenario_list(player_id, "请先设置剧本再开始游戏")
+                
             room_context.set_scenario(room_scenario_id)
 
             # 创建新的游戏局，使用房间中保存的剧本ID
             if not match_context:
                 match_context, create_messages = await match_service.create_match(room_context)
+                if not match_context:
+                    # 创建失败，返回错误消息
+                    return create_messages
                 logger.info(f"为开始游戏创建新游戏局: ID={match_context.match.id}")
             
             messages = []

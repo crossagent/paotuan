@@ -56,6 +56,12 @@ class MatchService:
         
         scenario_id = room_context.get_scenario_id()
 
+        # 确保有剧本ID
+        if not scenario_id:
+            error_msg = "无法创建游戏局: 未设置剧本"
+            logger.warning(error_msg)
+            return None, [{"recipient": room_context.room.host_id, "content": error_msg}]
+            
         # 创建新游戏局
         match_context = MatchContext.create_match(scenario_id)
         
@@ -67,11 +73,11 @@ class MatchService:
         messages = []
         
         # 通知房间中的所有玩家
-        create_message = f"创建了新的游戏局: {scene}"
+        create_message = f"创建了新的游戏局: {scenario_id}"
         for player in room_context.list_players():
             messages.append({"recipient": player.id, "content": create_message})
         
-        logger.info(f"创建新游戏局: {scene} (ID: {match_context.match.id})")
+        logger.info(f"创建新游戏局: {scenario_id} (ID: {match_context.match.id})")
 
         # 创建角色选择系统回合
         messages = []

@@ -229,7 +229,6 @@ async def get_room(
         "current_match": {
             "id": current_match.id,
             "status": current_match.status,
-            "scene": current_match.scene,
             "created_at": current_match.created_at,
             "scenario_id": current_match.scenario_id
         } if current_match else None,
@@ -363,7 +362,6 @@ async def start_game(
     event = StartMatchEvent(current_user.id, current_user.username)
     # 添加额外数据
     event.data["room_id"] = room_id
-    event.data["scene"] = game_data.get("scene", "默认场景")
     event.data["scenario_id"] = game_data.get("scenario_id")
     
     # 获取命令
@@ -397,12 +395,11 @@ async def start_game(
             detail="获取游戏局失败"
         )
     
-    logger.info(f"开始游戏: 房间={room.name} (ID: {room_id}), 场景={current_match.scene}, 剧本ID={current_match.scenario_id}")
+    logger.info(f"开始游戏: 房间={room.name} (ID: {room_id}), 剧本ID={current_match.scenario_id}")
     
     return {
         "match_id": current_match.id,
         "status": current_match.status,
-        "scene": current_match.scene,
         "scenario_id": current_match.scenario_id
     }
 

@@ -88,12 +88,11 @@ class Match(BaseModel):
     """游戏局模型"""
     id: str
     status: GameStatus = GameStatus.WAITING
-    scene: str
+    scenario_id: str  # 关联的剧本ID，设为必需字段
     created_at: datetime = datetime.now()
     turns: List[Union[BaseTurn, DMTurn, ActionTurn, DiceTurn, SystemTurn]] = []
     current_turn_id: Optional[str] = None
     game_state: Dict[str, Any] = {}
-    scenario_id: Optional[str] = None  # 关联的剧本ID
     characters: List[Character] = []  # 游戏局中的角色列表
     available_characters: List[Dict[str, Any]] = []  # 可选角色列表
 

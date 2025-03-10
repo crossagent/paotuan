@@ -68,7 +68,6 @@ class MatchContext:
             
         return {
             "id": self.match.id,
-            "scene": self.match.scene,
             "status": self.match.status,
             "scenario_id": self.match.scenario_id,
             "characters": characters,
@@ -79,11 +78,11 @@ class MatchContext:
         }
     
     @classmethod
-    def create_match(cls, scenario_id: str = "") -> "MatchContext":
+    def create_match(cls, scenario_id: str) -> "MatchContext":
         """创建新的游戏局
         
         Args:
-            scene: str - 游戏局场景名称
+            scenario_id: str - 游戏局使用的剧本ID
             
         Returns:
             MatchContext - 新创建的游戏局上下文
