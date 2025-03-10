@@ -54,9 +54,13 @@ class CommandServiceProvider(ServiceProvider):
         if service_type == GameStateService:
             service = GameStateService(self.game_state, self.event_bus)
         elif service_type == RoomService:
-            service = RoomService(self.game_state, self.event_bus)
+            # 获取 GameStateService 实例
+            game_state_service = self.get_service(GameStateService)
+            service = RoomService(game_state_service, self.event_bus)
         elif service_type == MatchService:
-            service = MatchService(self.game_state, self.event_bus)
+            # 获取 GameStateService 实例
+            game_state_service = self.get_service(GameStateService)
+            service = MatchService(game_state_service, None, self.rule_engine, self.event_bus)
         elif service_type == TurnService:
             service = TurnService(self.rule_engine)
         elif service_type == NarrationService:

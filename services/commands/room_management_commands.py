@@ -28,12 +28,12 @@ class CreateRoomCommand(GameCommand):
         room_service = self.service_provider.get_service(RoomService)
         
         # 创建新房间
-        room_controller = await room_service.create_room(room_name)
+        room_context = await room_service.create_room(room_name)
         
         # 返回创建成功消息
         return [{
             "recipient": player_id, 
-            "content": f"成功创建房间: {room_name} (ID: {room_controller.room.id})\n使用 /加入房间 {room_controller.room.id} 加入此房间"
+            "content": f"成功创建房间: {room_name} (ID: {room_context.room.id})\n使用 /加入房间 {room_context.room.id} 加入此房间"
         }]
 
 
@@ -59,17 +59,17 @@ class JoinRoomCommand(GameCommand):
         room_service = self.service_provider.get_service(RoomService)
         
         # 获取房间控制器
-        room_controller = await room_service.get_room_controller(room_id)
-        if not room_controller:
+        room_context = await room_service.get_room_context(room_id)
+        if not room_context:
             return [{"recipient": player_id, "content": f"房间不存在: {room_id}"}]
         
         # 添加玩家
-        success, message = await room_service.add_player_to_room(room_controller, player_id, player_name)
+        success, message = await room_service.add_player_to_room(room_context, player_id, player_name)
         if not success:
             return [{"recipient": player_id, "content": message}]
         
         # 返回加入成功消息
-        return [{"recipient": player_id, "content": f"你已成功加入房间: {room_controller.room.name} (ID: {room_controller.room.id})"}]
+        return [{"recipient": player_id, "content": f"你已成功加入房间: {room_context.room.name} (ID: {room_context.room.id})"}]
 
 
 class ListRoomsCommand(GameCommand):
@@ -92,19 +92,19 @@ class ListRoomsCommand(GameCommand):
         room_service = self.service_provider.get_service(RoomService)
         
         # 获取所有房间
-        room_controllers = await room_service.list_rooms()
+        room_contexts = await room_service.list_rooms()
         
-        if not room_controllers:
+        if not room_contexts:
             return [{"recipient": player_id, "content": "当前没有可用的房间，请使用 /创建房间 [房间名] 创建新房间"}]
         
         # 构建房间列表消息
         rooms_msg = "可用房间列表:\n"
-        for room_controller in room_controllers:
-            room = room_controller.room
+        for room_context in room_contexts:
+            room = room_context.room
             
             # 获取房间状态 - 直接从房间控制器获取
             status = room.status if hasattr(room, 'status') else "未知"
-            player_count = len(room_controller.get_players())
+            player_count = len(room_context.get_players())
             
             rooms_msg += f"- {room.name} (ID: {room.id})\n"
             rooms_msg += f"  状态: {status}, 玩家数: {player_count}\n"
@@ -174,17 +174,17 @@ class SetPlayerReadyCommand(GameCommand):
         room_service = self.service_provider.get_service(RoomService)
         
         # 获取房间控制器
-        room_controller = await room_service.get_room_controller(room_id)
-        if not room_controller:
+        room_context = await room_service.get_room_context(room_id)
+        if not room_context:
             return [{"recipient": player_id, "content": f"房间不存在: {room_id}"}]
         
         # 设置玩家准备状态
-        success, message = await room_service.set_player_ready(room_controller, player_id, is_ready)
+        success, message = await room_service.set_player_ready(room_context, player_id, is_ready)
         if not success:
             return [{"recipient": player_id, "content": message}]
         
         # 检查是否所有玩家都已准备
-        all_ready = room_controller.are_all_players_ready()
+        all_ready = room_context.are_all_players_ready()
         
         # 返回设置成功消息
         return [{
@@ -216,17 +216,17 @@ class KickPlayerCommand(GameCommand):
         room_service = self.service_provider.get_service(RoomService)
         
         # 获取房间控制器
-        room_controller = await room_service.get_room_controller(room_id)
-        if not room_controller:
+        room_context = await room_service.get_room_context(room_id)
+        if not room_context:
             return [{"recipient": host_id, "content": f"房间不存在: {room_id}"}]
         
         # 踢出玩家
-        success, message = await room_service.kick_player(room_controller, host_id, player_id)
+        success, message = await room_service.kick_player(room_context, host_id, player_id)
         if not success:
             return [{"recipient": host_id, "content": message}]
         
         # 返回踢出成功消息
         return [
             {"recipient": host_id, "content": f"已将玩家踢出房间"},
-            {"recipient": player_id, "content": f"你已被房主踢出房间: {room_controller.room.name}"}
+            {"recipient": player_id, "content": f"你已被房主踢出房间: {room_context.room.name}"}
         ]
