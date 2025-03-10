@@ -110,13 +110,8 @@ class RoomContext:
         for i, player in enumerate(self.room.players):
             if player.id == player_id:
                 removed_player = self.room.players.pop(i)
-                was_host = removed_player.is_host
                 
                 logger.info(f"玩家离开房间: {removed_player.name} (ID: {player_id})")
-                
-                # 如果是房主且房间还有其他玩家，选择新房主
-                if was_host and self.room.players:
-                    self.assign_new_host()
                 
                 return removed_player
                 
