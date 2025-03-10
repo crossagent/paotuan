@@ -32,42 +32,42 @@ class StartMatchCommand(GameCommand):
         match_service = self.service_provider.get_service(MatchService)
         
         # 获取玩家所在房间的控制器
-        room_controller = await room_service.get_player_room_controller(player_id)
-        if not room_controller:
+        room_context = await room_service.get_player_room_context(player_id)
+        if not room_context:
             return [{"recipient": player_id, "content": "你尚未加入任何房间，请先使用 /加入游戏 或 /加入房间 [房间ID] 加入房间"}]
         
         # 检查房间中是否有玩家
-        if not room_controller.get_players():
+        if not room_context.get_players():
             logger.warning(f"开始游戏局失败: 房间中没有玩家")
             return [{"recipient": player_id, "content": "房间中没有玩家，无法开始游戏局"}]
         
         try:
             # 获取或创建游戏局控制器
-            match_controller = await match_service.get_match_controller(room_controller)
+            match_context = await match_service.get_match_context(room_context)
             
             # 如果没有游戏局，创建一个新的并提示设置剧本
-            if not match_controller:
-                match_controller, create_messages = await match_service.create_match(room_controller, "新的冒险")
+            if not match_context:
+                match_context, create_messages = await match_service.create_match(room_context, "新的冒险")
                 return await self._send_scenario_list(player_id, "已创建游戏局，请先设置剧本再开始游戏局！")
             
             # 检查游戏是否已经在运行
-            if await match_service.is_match_running(match_controller):
-                logger.warning(f"无法开始新游戏局: 当前已有进行中的游戏局 ID={match_controller.match.id}")
+            if await match_service.is_match_running(match_context):
+                logger.warning(f"无法开始新游戏局: 当前已有进行中的游戏局 ID={match_context.match.id}")
                 return [{"recipient": player_id, "content": f"无法开始游戏局: 当前已有进行中的游戏局"}]
             
             # 检查是否已设置剧本
-            if not match_controller.match.scenario_id:
+            if not match_context.match.scenario_id:
                 return await self._send_scenario_list(player_id, "请先设置剧本再开始游戏局！")
                 
             # 检查是否所有玩家都已选择角色
-            all_selected, players_without_characters = await match_service.check_all_players_selected_character(match_controller)
+            all_selected, players_without_characters = await match_service.check_all_players_selected_character(match_context)
                     
             if not all_selected:
                 # 如果有玩家未选择角色，提示选择角色
                 player_list = ", ".join(players_without_characters)
                 
                 # 加载可选角色列表
-                available_characters = await match_service.load_available_characters(match_controller)
+                available_characters = await match_service.load_available_characters(match_context)
                 
                 # 构建可选角色列表消息
                 character_msg = "【可选角色】\n"
@@ -87,7 +87,7 @@ class StartMatchCommand(GameCommand):
                 ]
             
             # 所有条件都满足，可以开始游戏
-            success, start_messages = await match_service.start_match(match_controller, room_controller)
+            success, start_messages = await match_service.start_match(match_context, room_context)
             if not success:
                 return [{"recipient": player_id, "content": "开始游戏局失败，请检查游戏状态"}]
             
@@ -137,17 +137,17 @@ class EndMatchCommand(GameCommand):
         match_service = self.service_provider.get_service(MatchService)
         
         # 获取玩家所在房间的控制器
-        room_controller = await room_service.get_player_room_controller(player_id)
-        if not room_controller:
+        room_context = await room_service.get_player_room_context(player_id)
+        if not room_context:
             return [{"recipient": player_id, "content": "你尚未加入任何房间，请先使用 /加入游戏 或 /加入房间 [房间ID] 加入房间"}]
         
         # 获取游戏局控制器
-        match_controller = await match_service.get_match_controller(room_controller)
-        if not match_controller:
+        match_context = await match_service.get_match_context(room_context)
+        if not match_context:
             return [{"recipient": player_id, "content": "当前没有进行中的游戏局"}]
         
         # 结束游戏局
-        success, end_messages = await match_service.end_match(match_controller, result)
+        success, end_messages = await match_service.end_match(match_context, result)
         if not success:
             return [{"recipient": player_id, "content": "结束游戏局失败，可能当前游戏局未在运行中"}]
         
@@ -176,18 +176,18 @@ class SetScenarioCommand(GameCommand):
         match_service = self.service_provider.get_service(MatchService)
         
         # 获取玩家所在房间的控制器
-        room_controller = await room_service.get_player_room_controller(player_id)
-        if not room_controller:
+        room_context = await room_service.get_player_room_context(player_id)
+        if not room_context:
             return [{"recipient": player_id, "content": "你尚未加入任何房间，请先使用 /加入游戏 或 /加入房间 [房间ID] 加入房间"}]
         
         # 获取或创建游戏局控制器
-        match_controller = await match_service.get_match_controller(room_controller)
-        if not match_controller:
-            match_controller, create_messages = await match_service.create_match(room_controller, "新的冒险")
-            logger.info(f"为设置剧本创建新游戏局: ID={match_controller.match.id}")
+        match_context = await match_service.get_match_context(room_context)
+        if not match_context:
+            match_context, create_messages = await match_service.create_match(room_context, "新的冒险")
+            logger.info(f"为设置剧本创建新游戏局: ID={match_context.match.id}")
         
         # 设置剧本
-        success, error_msg, scenario_messages = await match_service.set_scenario(match_controller, room_controller, scenario_id)
+        success, error_msg, scenario_messages = await match_service.set_scenario(match_context, room_context, scenario_id)
         if not success:
             # 获取可用剧本列表并发送
             scenario_loader = ScenarioLoader()
@@ -220,17 +220,17 @@ class PauseMatchCommand(GameCommand):
         match_service = self.service_provider.get_service(MatchService)
         
         # 获取玩家所在房间的控制器
-        room_controller = await room_service.get_player_room_controller(player_id)
-        if not room_controller:
+        room_context = await room_service.get_player_room_context(player_id)
+        if not room_context:
             return [{"recipient": player_id, "content": "你尚未加入任何房间，请先使用 /加入游戏 或 /加入房间 [房间ID] 加入房间"}]
         
         # 获取游戏局控制器
-        match_controller = await match_service.get_match_controller(room_controller)
-        if not match_controller:
+        match_context = await match_service.get_match_context(room_context)
+        if not match_context:
             return [{"recipient": player_id, "content": "当前没有进行中的游戏局"}]
         
         # 暂停游戏局
-        success, pause_messages = await match_service.pause_match(match_controller, room_controller)
+        success, pause_messages = await match_service.pause_match(match_context, room_context)
         if not success:
             return [{"recipient": player_id, "content": "暂停游戏局失败，可能当前游戏局未在运行中"}]
         
@@ -256,17 +256,17 @@ class ResumeMatchCommand(GameCommand):
         match_service = self.service_provider.get_service(MatchService)
         
         # 获取玩家所在房间的控制器
-        room_controller = await room_service.get_player_room_controller(player_id)
-        if not room_controller:
+        room_context = await room_service.get_player_room_context(player_id)
+        if not room_context:
             return [{"recipient": player_id, "content": "你尚未加入任何房间，请先使用 /加入游戏 或 /加入房间 [房间ID] 加入房间"}]
         
         # 获取游戏局控制器
-        match_controller = await match_service.get_match_controller(room_controller)
-        if not match_controller:
+        match_context = await match_service.get_match_context(room_context)
+        if not match_context:
             return [{"recipient": player_id, "content": "当前没有进行中的游戏局"}]
         
         # 恢复游戏局
-        success, resume_messages = await match_service.resume_match(match_controller, room_controller)
+        success, resume_messages = await match_service.resume_match(match_context, room_context)
         if not success:
             return [{"recipient": player_id, "content": "恢复游戏局失败，可能当前游戏局未处于暂停状态"}]
         

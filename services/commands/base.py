@@ -1,14 +1,16 @@
 import logging
-from typing import List, Dict, Any, Optional, Union, Protocol
+from typing import List, Dict, Any, Optional, Union, Protocol, TypeVar, Type, Generic
 
 from adapters.base import GameEvent
 
 logger = logging.getLogger(__name__)
 
+T = TypeVar('T')
+
 class ServiceProvider(Protocol):
     """服务提供者接口"""
     
-    def get_service(self, service_type: type) -> Any:
+    def get_service(self, service_type: Type[T]) -> T:
         """获取指定类型的服务实例"""
         ...
 

@@ -25,15 +25,22 @@ class CreateRoomCommand(GameCommand):
         logger.info(f"处理创建房间事件: 玩家ID={player_id}, 房间名称={room_name}")
         
         # 获取房间服务
-        room_service = self.service_provider.get_service(RoomService)
+        room_service:RoomService = self.service_provider.get_service(RoomService)
         
         # 创建新房间
-        room_context = await room_service.create_room(room_name)
+        room_context, msgs = await room_service.create_room(room_name)
         
-        # 返回创建成功消息
+        # 拼接消息列表中的所有消息内容（假设每个字典都有 "content" 字段）
+        extra_messages = " ".join(msg.get("content", "") for msg in msgs)
+
+        # 返回创建成功消息，并将额外消息也包含进去
         return [{
             "recipient": player_id, 
-            "content": f"成功创建房间: {room_name} (ID: {room_context.room.id})\n使用 /加入房间 {room_context.room.id} 加入此房间"
+            "content": (
+                f"成功创建房间: {room_name} (ID: {room_context.room.id})\n"
+                f"使用 /加入房间 {room_context.room.id} 加入此房间\n"
+                f"附加信息: {extra_messages}"
+            )
         }]
 
 
