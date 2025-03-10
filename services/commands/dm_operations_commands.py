@@ -62,12 +62,12 @@ class DMNarrationCommand(GameCommand):
             return []
         
         # 检查是否是DM回合
-        if not await turn_service.is(turn_context):
+        if not await turn_service.is_dm_turn(turn_context):
             logger.warning("当前不是DM回合")
             return []
         
         # 准备AI上下文
-        players = room_context.get_players()
+        players = room_context.list_players()
         player_ids = [p.id for p in players]
         
         # 获取上下文信息
@@ -108,7 +108,7 @@ class DMNarrationCommand(GameCommand):
         messages.extend(regular_messages)
         
         # 处理回合转换和通知玩家
-        turn_messages = await turn_service.handle_turn_transition(response, turn_context, match_context, player_ids)
+        turn_messages = await turn_service.handle_turn_transition(response, turn_context, match_context, room_context)
         messages.extend(turn_messages)
         
         return messages

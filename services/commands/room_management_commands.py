@@ -109,12 +109,11 @@ class ListRoomsCommand(GameCommand):
         for room_context in room_contexts:
             room = room_context.room
             
-            # 获取房间状态 - 直接从房间控制器获取
-            status = room.status if hasattr(room, 'status') else "未知"
-            player_count = len(room_context.get_players())
+            # 获取房间状态
+            player_count = len(room_context.list_players())
             
             rooms_msg += f"- {room.name} (ID: {room.id})\n"
-            rooms_msg += f"  状态: {status}, 玩家数: {player_count}\n"
+            rooms_msg += f"  玩家数: {player_count}\n"
         
         rooms_msg += "\n使用 /加入房间 [房间ID] 加入房间"
         

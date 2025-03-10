@@ -23,60 +23,34 @@ class PlayerJoinedCommand(GameCommand):
         """
         player_id = event.data["player_id"]
         player_name = event.data["player_name"]
+        room_id = event.data.get("room_id")
         
-        logger.info(f"处理玩家加入事件: 玩家={player_name}({player_id})")
+        logger.info(f"处理玩家加入事件: 玩家={player_name}({player_id}), 目标房间ID={room_id}")
         
         # 获取服务
         room_service = self.service_provider.get_service(RoomService)
         
-        # 获取所有房间
-        room_contexts = await room_service.list_rooms()
+        # 必须指定房间ID
+        if not room_id:
+            logger.warning(f"玩家尝试加入房间但未指定房间ID: {player_name}({player_id})")
+            return [{"recipient": player_id, "content": "请指定要加入的房间ID，使用 /加入房间 [房间ID]"}]
         
-        # 如果没有房间，创建一个默认房间
-        if not room_contexts:
-            room_context, _ = await room_service.create_room("默认房间")
-            player, messages = await room_service.add_player_to_room(room_context, player_id, player_name)
-            
-            if player is None:
-                # 加入房间失败（这种情况不应该发生，因为房间是新创建的）
-                error_message = messages[0]["content"] if messages else "加入房间失败"
-                logger.error(f"创建默认房间后加入失败: {error_message}")
-                return [{"recipient": player_id, "content": error_message}]
-            
-            logger.info(f"创建默认房间并添加玩家: {player_name}({player_id}), 房间={room_context.room.name}")
-            
-            return [{"recipient": player_id, "content": f"已创建默认房间并加入: {room_context.room.name} (ID: {room_context.room.id})"}]
+        # 尝试获取指定的房间
+        room_context = await room_service.get_room_context(room_id)
+        if not room_context:
+            logger.warning(f"玩家尝试加入不存在的房间: {room_id}")
+            return [{"recipient": player_id, "content": f"找不到ID为 {room_id} 的房间"}]
         
-        # 如果有多个房间，返回房间列表让玩家选择
-        if len(room_contexts) > 1:
-            rooms_msg = "当前有多个房间可用，请选择一个加入:\n"
-            for room_context in room_contexts:
-                room = room_context.room
-                
-                # 获取房间状态 - 直接从房间控制器获取
-                status = room.status if hasattr(room, 'status') else "未知"
-                player_count = len(room_context.get_players())
-                
-                rooms_msg += f"- {room.name} (ID: {room.id})\n"
-                rooms_msg += f"  状态: {status}, 玩家数: {player_count}\n"
-            
-            rooms_msg += "\n使用 /加入房间 [房间ID] 加入指定房间"
-            
-            logger.info(f"向玩家发送房间列表: {player_name}({player_id})")
-            
-            return [{"recipient": player_id, "content": rooms_msg}]
-        
-        # 如果只有一个房间，直接加入
-        room_context = room_contexts[0]
+        # 加入指定的房间
         player, messages = await room_service.add_player_to_room(room_context, player_id, player_name)
         
         if player is None:
             # 加入房间失败（可能房间已满）
-            error_message = messages[0]["content"] if messages else "加入房间失败"
-            logger.warning(f"玩家加入唯一房间失败: {error_message}")
+            error_message = messages[0]["content"] if messages else "加入指定房间失败"
+            logger.warning(f"玩家加入指定房间失败: {error_message}")
             return [{"recipient": player_id, "content": error_message}]
         
-        logger.info(f"玩家加入唯一房间: {player_name}({player_id}), 房间={room_context.room.name}")
+        logger.info(f"玩家加入指定房间: {player_name}({player_id}), 房间={room_context.room.name}")
         
         return [{"recipient": player_id, "content": f"你已成功加入房间: {room_context.room.name} (ID: {room_context.room.id})"}]
 

@@ -70,8 +70,11 @@ class GetScenarioCommand(GameCommand):
             scenario_info = {
                 "id": scenario_id,
                 "name": scenario.name,
-                "description": scenario.description,
-                "player_count": scenario.player_count,
+                "min_player_count": scenario.min_players,
+                "max_player_count": scenario.max_players,
+                "victory_conditions": scenario.victory_conditions,
+                "failure_conditions": scenario.failure_conditions,
+                "world_background": scenario.world_background,
                 "main_scene": scenario.main_scene,
                 "scenes": scenes
             }

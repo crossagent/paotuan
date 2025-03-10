@@ -371,18 +371,17 @@ class RoomService:
             
         return RoomContext(room)
     
-    async def list_rooms(self) -> List[Dict[str, Any]]:
+    async def list_rooms(self) -> List[RoomContext]:
         """获取所有房间信息
         
         Returns:
-            List[Dict[str, Any]] - 房间信息列表
+            List[RoomContext] - 房间信息列表
         """
         rooms = self.game_state_service.list_rooms()
         room_info_list = []
         
         for room in rooms:
             room_context = RoomContext(room)
-            room_info = room_context.dump_state()
-            room_info_list.append(room_info)
+            room_info_list.append(room_context)
             
         return room_info_list
