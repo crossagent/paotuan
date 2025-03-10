@@ -65,32 +65,88 @@ async def send_action(
             detail="行动内容不能为空"
         )
     
-    # 处理行动
-    await web_adapter.handle_message(current_user.id, current_user.username, action_text)
+    # 使用CharacterActionCommand
+    from adapters.base import PlayerActionEvent
+    from services.commands.factory import CommandFactory
+    from core.rules import RuleEngine
     
-    return {
-        "success": True,
-        "message": "行动已提交"
-    }
+    # 创建命令工厂
+    command_factory = CommandFactory(
+        web_adapter.game_state,
+        web_adapter.event_bus,
+        web_adapter.ai_service,
+        RuleEngine()
+    )
+    
+    # 创建事件
+    event = PlayerActionEvent(current_user.id, action_text)
+    
+    # 获取命令
+    command = command_factory.create_command(event.event_type)
+    
+    # 执行命令
+    result = await command.execute(event)
+    
+    # 处理结果
+    # 检查是否成功
+    success_message = next((msg for msg in result if msg.get("recipient") == current_user.id), None)
+    if not success_message:
+        # 如果没有特定的成功消息，我们认为操作成功
+        return {
+            "success": True,
+            "message": "行动已提交"
+        }
+    else:
+        # 返回实际的结果消息
+        return {
+            "success": True,
+            "message": success_message.get("content", "行动已提交")
+        }
 
 # 获取可用剧本列表
 @router.get("/scenarios", response_model=List[Dict[str, Any]])
 async def list_scenarios(current_user: User = Depends(get_current_user)):
     """获取可用剧本列表"""
-    try:
-        # 加载剧本
-        from utils.scenario_loader import ScenarioLoader
-        scenario_loader = ScenarioLoader()
-        scenarios = scenario_loader.list_scenarios()
-        
-        # 直接返回列表，因为ScenarioLoader.list_scenarios()已经返回了格式化的列表
-        return scenarios
-    except Exception as e:
-        logger.error(f"获取剧本列表失败: {str(e)}")
+    if not web_adapter:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="游戏服务器未启动"
+        )
+    
+    # 使用ListScenariosCommand
+    from adapters.base import ListScenariosEvent
+    from services.commands.factory import CommandFactory
+    from core.rules import RuleEngine
+    
+    # 创建命令工厂
+    command_factory = CommandFactory(
+        web_adapter.game_state,
+        web_adapter.event_bus,
+        web_adapter.ai_service,
+        RuleEngine()
+    )
+    
+    # 创建事件
+    event = ListScenariosEvent(current_user.id)
+    
+    # 获取命令
+    command = command_factory.create_command(event.event_type)
+    
+    # 执行命令
+    result = await command.execute(event)
+    
+    # 处理结果
+    # 检查是否成功
+    success_message = next((msg for msg in result if msg.get("recipient") == current_user.id), None)
+    if not success_message:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"获取剧本列表失败: {str(e)}"
+            detail="获取剧本列表失败"
         )
+    
+    # 返回剧本列表
+    scenarios = success_message.get("content", [])
+    return scenarios
 
 # 获取剧本详情
 @router.get("/scenarios/{scenario_id}", response_model=Dict[str, Any])
@@ -99,40 +155,53 @@ async def get_scenario(
     current_user: User = Depends(get_current_user)
 ):
     """获取剧本详情"""
-    try:
-        # 加载剧本
-        from utils.scenario_loader import ScenarioLoader
-        scenario_loader = ScenarioLoader()
-        scenario = scenario_loader.load_scenario(scenario_id)
-        
-        if not scenario:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"剧本不存在: {scenario_id}"
-            )
-        
-        # 构建场景列表
-        scenes = []
-        for scene in scenario.scenes:
-            scenes.append({
-                "name": scene.name,
-                "description": scene.description
-            })
-        
-        return {
-            "id": scenario_id,
-            "name": scenario.name,
-            "description": scenario.description,
-            "player_count": scenario.player_count,
-            "main_scene": scenario.main_scene,
-            "scenes": scenes
-        }
-    except Exception as e:
-        logger.error(f"获取剧本详情失败: {str(e)}")
+    if not web_adapter:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="游戏服务器未启动"
+        )
+    
+    # 使用GetScenarioCommand
+    from adapters.base import GetScenarioEvent
+    from services.commands.factory import CommandFactory
+    from core.rules import RuleEngine
+    
+    # 创建命令工厂
+    command_factory = CommandFactory(
+        web_adapter.game_state,
+        web_adapter.event_bus,
+        web_adapter.ai_service,
+        RuleEngine()
+    )
+    
+    # 创建事件
+    event = GetScenarioEvent(current_user.id, scenario_id)
+    
+    # 获取命令
+    command = command_factory.create_command(event.event_type)
+    
+    # 执行命令
+    result = await command.execute(event)
+    
+    # 处理结果
+    # 检查是否成功
+    success_message = next((msg for msg in result if msg.get("recipient") == current_user.id), None)
+    if not success_message:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"获取剧本详情失败: {str(e)}"
+            detail="获取剧本详情失败"
         )
+    
+    # 检查是否有错误消息
+    content = success_message.get("content", {})
+    if isinstance(content, str) and "剧本不存在" in content:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=content
+        )
+    
+    # 返回剧本详情
+    return content
 
 # WebSocket连接
 @router.websocket("/ws")

@@ -49,12 +49,30 @@ def set_game_state(game_state):
 @router.get("/", response_model=List[Dict[str, Any]])
 async def list_rooms(current_user: User = Depends(get_current_user)):
     """获取房间列表"""
-    if not game_state_service:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="游戏服务器未启动"
-        )
+    # 使用ListRoomsCommand
+    from adapters.base import ListRoomsEvent
+    from services.commands.factory import CommandFactory
+    from core.rules import RuleEngine
     
+    # 创建命令工厂
+    command_factory = CommandFactory(
+        game_state_service.game_state, 
+        event_bus, 
+        None,  # AI服务暂时不需要
+        RuleEngine()  # 创建规则引擎实例
+    )
+    
+    # 创建事件
+    event = ListRoomsEvent(current_user.id)
+    
+    # 获取命令
+    command = command_factory.create_command(event.event_type)
+    
+    # 执行命令
+    result = await command.execute(event)
+    
+    # 处理结果
+    # 由于ListRoomsCommand返回的是消息格式，需要转换为API响应格式
     rooms = []
     for room in game_state_service.list_rooms():
         room_info = RoomInfo(room)
@@ -75,42 +93,57 @@ async def create_room(
     current_user: User = Depends(get_current_user)
 ):
     """创建新房间"""
-    if not game_state_service or not room_service:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="游戏服务器未启动"
-        )
+    # 使用CreateRoomCommand
+    from adapters.base import CreateRoomEvent
+    from services.commands.factory import CommandFactory
+    from core.rules import RuleEngine
     
+    # 获取房间名称
     room_name = room_data.get("name", f"{current_user.username}的房间")
-    max_players = room_data.get("max_players", 6)  # 获取最大玩家数，默认为6
     
-    # 验证最大玩家数
-    if max_players < 2:
+    # 创建命令工厂
+    command_factory = CommandFactory(
+        game_state_service.game_state, 
+        event_bus, 
+        None,  # AI服务暂时不需要
+        RuleEngine()  # 创建规则引擎实例
+    )
+    
+    # 创建事件
+    event = CreateRoomEvent(current_user.id, room_name)
+    
+    # 获取命令
+    command = command_factory.create_command(event.event_type)
+    
+    # 执行命令
+    result = await command.execute(event)
+    
+    # 处理结果
+    # 由于CreateRoomCommand返回的是消息格式，需要转换为API响应格式
+    # 这里我们需要从game_state_service获取新创建的房间
+    
+    # 获取所有房间
+    rooms = game_state_service.list_rooms()
+    
+    # 找到最新创建的房间（假设是最后一个）
+    room = rooms[-1] if rooms else None
+    
+    if not room:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="房间最大玩家数不能小于2"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="创建房间失败"
         )
-    
-    if max_players > 10:  # 设置一个上限
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="房间最大玩家数不能超过10"
-        )
-    
-    # 创建房间
-    from core.contexts.room_context import RoomContext
-    
-    # 使用RoomService创建房间
-    room_context, messages = await room_service.create_room(room_name, current_user.id)
-    room = room_context.room
     
     # 设置最大玩家数
+    max_players = room_data.get("max_players", 6)  # 获取最大玩家数，默认为6
     room.max_players = max_players
     logger.info(f"设置房间最大玩家数: {max_players}")
     
     # 将创建者自动加入房间
-    player, _ = await room_service.add_player_to_room(room_context, current_user.id, current_user.username)
-    logger.info(f"创建者 {current_user.username} (ID: {current_user.id}) 自动加入房间")
+    from adapters.base import JoinRoomEvent
+    join_event = JoinRoomEvent(current_user.id, current_user.username, room.id)
+    join_command = command_factory.create_command(join_event.event_type)
+    join_result = await join_command.execute(join_event)
     
     logger.info(f"创建房间: {room_name} (ID: {room.id}), 最大玩家数: {max_players}, 创建者: {current_user.username}")
     
@@ -210,12 +243,31 @@ async def join_room(
     current_user: User = Depends(get_current_user)
 ):
     """加入房间"""
-    if not game_state_service or not room_service:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="游戏服务器未启动"
-        )
+    # 使用JoinRoomCommand
+    from adapters.base import JoinRoomEvent
+    from services.commands.factory import CommandFactory
+    from core.rules import RuleEngine
     
+    # 创建命令工厂
+    command_factory = CommandFactory(
+        game_state_service.game_state, 
+        event_bus, 
+        None,  # AI服务暂时不需要
+        RuleEngine()  # 创建规则引擎实例
+    )
+    
+    # 创建事件
+    event = JoinRoomEvent(current_user.id, current_user.username, room_id)
+    
+    # 获取命令
+    command = command_factory.create_command(event.event_type)
+    
+    # 执行命令
+    result = await command.execute(event)
+    
+    # 处理结果
+    # 由于JoinRoomCommand返回的是消息格式，需要转换为API响应格式
+    # 获取房间
     room = game_state_service.get_room(room_id)
     if not room:
         raise HTTPException(
@@ -223,17 +275,14 @@ async def join_room(
             detail="房间不存在"
         )
     
-    # 创建房间控制器
-    from core.contexts.room_context import RoomContext
-    room_context = RoomContext(room)
-    
-    # 将玩家添加到房间
-    try:
-        player, _ = await room_service.add_player_to_room(room_context, current_user.id, current_user.username)
-    except ValueError as e:
+    # 获取玩家
+    player = next((p for p in room.players if p.id == current_user.id), None)
+    if not player:
+        # 如果玩家不在房间中，可能是加入失败
+        error_message = result[0]["content"] if result else "加入房间失败"
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            detail=error_message
         )
     
     logger.info(f"玩家加入房间: {current_user.username} (ID: {current_user.id}), 房间: {room.name} (ID: {room_id})")
@@ -254,38 +303,39 @@ async def leave_room(
     current_user: User = Depends(get_current_user)
 ):
     """离开房间"""
-    if not game_state_service or not room_service:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="游戏服务器未启动"
-        )
+    # 使用LeaveRoomCommand
+    from adapters.base import PlayerLeftEvent
+    from services.commands.factory import CommandFactory
+    from core.rules import RuleEngine
     
+    # 获取房间名称（用于日志和返回消息）
+    room_name = ""
     room = game_state_service.get_room(room_id)
-    if not room:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="房间不存在"
-        )
+    if room:
+        room_name = room.name
     
-    # 创建房间控制器
-    from core.contexts.room_context import RoomContext
-    room_context = RoomContext(room)
+    # 创建命令工厂
+    command_factory = CommandFactory(
+        game_state_service.game_state, 
+        event_bus, 
+        None,  # AI服务暂时不需要
+        RuleEngine()  # 创建规则引擎实例
+    )
     
-    # 将玩家从房间中移除
-    success, messages = await room_service.remove_player_from_room(room_context, current_user.id)
-    if not success:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="玩家不在房间中"
-        )
+    # 创建事件
+    event = PlayerLeftEvent(current_user.id, current_user.username, room_id)
     
-    logger.info(f"玩家离开房间: {current_user.username} (ID: {current_user.id}), 房间: {room.name} (ID: {room_id})")
+    # 获取命令
+    command = command_factory.create_command(event.event_type)
     
-    # 消息已经由room_service处理
+    # 执行命令
+    result = await command.execute(event)
+    
+    logger.info(f"玩家离开房间: {current_user.username} (ID: {current_user.id}), 房间: {room_name} (ID: {room_id})")
     
     return {
         "success": True,
-        "message": f"已离开房间: {room.name}"
+        "message": f"已离开房间: {room_name}"
     }
 
 # 开始游戏
@@ -296,98 +346,65 @@ async def start_game(
     current_user: User = Depends(get_current_user)
 ):
     """开始游戏"""
-    if not game_state_service or not room_service:
+    # 使用StartMatchCommand
+    from adapters.base import StartMatchEvent
+    from services.commands.factory import CommandFactory
+    from core.rules import RuleEngine
+    
+    # 创建命令工厂
+    command_factory = CommandFactory(
+        game_state_service.game_state, 
+        event_bus, 
+        None,  # AI服务暂时不需要
+        RuleEngine()  # 创建规则引擎实例
+    )
+    
+    # 创建事件
+    event = StartMatchEvent(current_user.id, current_user.username)
+    # 添加额外数据
+    event.data["room_id"] = room_id
+    event.data["scene"] = game_data.get("scene", "默认场景")
+    event.data["scenario_id"] = game_data.get("scenario_id")
+    
+    # 获取命令
+    command = command_factory.create_command(event.event_type)
+    
+    # 执行命令
+    result = await command.execute(event)
+    
+    # 处理结果
+    # 检查是否成功
+    success_message = next((msg for msg in result if msg.get("recipient") == current_user.id), None)
+    if not success_message or "游戏已开始" not in success_message.get("content", ""):
+        error_message = success_message.get("content") if success_message else "开始游戏失败"
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="游戏服务器未启动"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_message
         )
     
+    # 获取当前游戏局
     room = game_state_service.get_room(room_id)
-    if not room:
+    if not room or not room.current_match_id:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="房间不存在"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="获取游戏局失败"
         )
     
-    # 创建房间控制器
-    from core.contexts.room_context import RoomContext
-    room_context = RoomContext(room)
-    
-    # 检查是否是房主
-    host = room_context.get_host()
-    if not host or host.id != current_user.id:
+    current_match = next((m for m in room.matches if m.id == room.current_match_id), None)
+    if not current_match:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="只有房主可以开始游戏"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="获取游戏局失败"
         )
     
-    # 检查是否所有玩家都已准备
-    if not room_context.are_all_players_ready() and len(room.players) > 1:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="还有玩家未准备，无法开始游戏"
-        )
+    logger.info(f"开始游戏: 房间={room.name} (ID: {room_id}), 场景={current_match.scene}, 剧本ID={current_match.scenario_id}")
     
-    # 检查是否有进行中的游戏
-    current_match = None
-    if room.current_match_id:
-        # 从游戏状态服务获取当前游戏局
-        for match in room.matches:
-            if match.id == room.current_match_id:
-                current_match = match
-                break
-    if current_match and current_match.status == GameStatus.RUNNING:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="已有进行中的游戏"
-        )
-    
-    # 获取场景和剧本ID
-    scene = game_data.get("scene", "默认场景")
-    scenario_id = game_data.get("scenario_id")
-    
-    try:
-        # 创建新游戏局
-        from models.entities import Match
-        from datetime import datetime
-        
-        match_id = str(uuid.uuid4())
-        match = Match(id=match_id, room_id=room.id, scene=scene, created_at=datetime.now())
-        room.matches.append(match)
-        room.current_match_id = match_id
-        
-        # 如果指定了剧本，设置剧本
-        if scenario_id:
-            from utils.scenario_loader import ScenarioLoader
-            scenario_loader = ScenarioLoader()
-            scenario = scenario_loader.load_scenario(scenario_id)
-            if not scenario:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"剧本不存在: {scenario_id}"
-                )
-            match.scenario_id = scenario_id
-        
-        # 更新游戏状态
-        match.status = GameStatus.RUNNING
-        
-        # 重置所有玩家的准备状态
-        for player in room.players:
-            player.is_ready = False
-        
-        logger.info(f"开始游戏: 房间={room.name} (ID: {room_id}), 场景={scene}, 剧本ID={scenario_id}")
-        
-        return {
-            "match_id": match.id,
-            "status": match.status,
-            "scene": match.scene,
-            "scenario_id": match.scenario_id
-        }
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+    return {
+        "match_id": current_match.id,
+        "status": current_match.status,
+        "scene": current_match.scene,
+        "scenario_id": current_match.scenario_id
+    }
 
 # 设置玩家准备状态
 @router.post("/{room_id}/ready", response_model=Dict[str, Any])
@@ -397,12 +414,33 @@ async def set_player_ready(
     current_user: User = Depends(get_current_user)
 ):
     """设置玩家准备状态"""
-    if not game_state_service or not room_service:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="游戏服务器未启动"
-        )
+    # 使用SetPlayerReadyCommand
+    from adapters.base import SetPlayerReadyEvent
+    from services.commands.factory import CommandFactory
+    from core.rules import RuleEngine
     
+    # 获取准备状态
+    is_ready = ready_data.get("is_ready", True)
+    
+    # 创建命令工厂
+    command_factory = CommandFactory(
+        game_state_service.game_state, 
+        event_bus, 
+        None,  # AI服务暂时不需要
+        RuleEngine()  # 创建规则引擎实例
+    )
+    
+    # 创建事件
+    event = SetPlayerReadyEvent(current_user.id, room_id, is_ready)
+    
+    # 获取命令
+    command = command_factory.create_command(event.event_type)
+    
+    # 执行命令
+    result = await command.execute(event)
+    
+    # 处理结果
+    # 获取房间
     room = game_state_service.get_room(room_id)
     if not room:
         raise HTTPException(
@@ -413,25 +451,6 @@ async def set_player_ready(
     # 创建房间控制器
     from core.contexts.room_context import RoomContext
     room_context = RoomContext(room)
-    
-    # 获取准备状态
-    is_ready = ready_data.get("is_ready", True)
-    
-    # 检查是否是房主
-    host = room_context.get_host()
-    if host and host.id == current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="房主不需要准备"
-        )
-    
-    # 设置准备状态
-    success, _ = await room_service.set_player_ready(room_context, current_user.id, is_ready)
-    if not success:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="设置准备状态失败，玩家可能不在房间中"
-        )
     
     # 检查是否所有玩家都已准备
     all_ready = room_context.are_all_players_ready()
@@ -452,22 +471,10 @@ async def select_character(
     current_user: User = Depends(get_current_user)
 ):
     """选择角色"""
-    if not game_state_service or not room_service:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="游戏服务器未启动"
-        )
-    
-    room = game_state_service.get_room(room_id)
-    if not room:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="房间不存在"
-        )
-    
-    # 创建房间控制器
-    from core.contexts.room_context import RoomContext
-    room_context = RoomContext(room)
+    # 使用SelectCharacterCommand
+    from adapters.base import SelectCharacterEvent
+    from services.commands.factory import CommandFactory
+    from core.rules import RuleEngine
     
     # 获取角色名称
     character_name = character_data.get("character_name")
@@ -477,41 +484,38 @@ async def select_character(
             detail="角色名称不能为空"
         )
     
-    # 获取当前游戏局
-    current_match = None
-    if room.current_match_id:
-        # 从游戏状态服务获取当前游戏局
-        for match in room.matches:
-            if match.id == room.current_match_id:
-                current_match = match
-                break
+    # 创建命令工厂
+    command_factory = CommandFactory(
+        game_state_service.game_state, 
+        event_bus, 
+        None,  # AI服务暂时不需要
+        RuleEngine()  # 创建规则引擎实例
+    )
     
-    if not current_match:
-        success, message = False, "没有进行中的游戏"
-    else:
-        # 查找或创建角色
-        character = next((c for c in current_match.characters if c.name == character_name), None)
-        if not character:
-            # 创建新角色
-            from models.entities import Character
-            character_id = str(uuid.uuid4())
-            character = Character(id=character_id, name=character_name, match_id=current_match.id)
-            current_match.characters.append(character)
-        
-        # 设置玩家角色
-        success, _ = await room_service.set_player_character(room_context, current_user.id, character.id)
-        message = f"已选择角色: {character_name}" if success else "选择角色失败"
-    if not success:
+    # 创建事件
+    event = SelectCharacterEvent(current_user.id, character_name)
+    
+    # 获取命令
+    command = command_factory.create_command(event.event_type)
+    
+    # 执行命令
+    result = await command.execute(event)
+    
+    # 处理结果
+    # 检查是否成功
+    success_message = next((msg for msg in result if msg.get("recipient") == current_user.id), None)
+    if not success_message or "已选择角色" not in success_message.get("content", ""):
+        error_message = success_message.get("content") if success_message else "选择角色失败"
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=message
+            detail=error_message
         )
     
     logger.info(f"玩家 {current_user.username} (ID: {current_user.id}) 选择了角色: {character_name}")
     
     return {
         "success": True,
-        "message": message,
+        "message": f"已选择角色: {character_name}",
         "character_name": character_name
     }
 
@@ -523,30 +527,10 @@ async def set_scenario(
     current_user: User = Depends(get_current_user)
 ):
     """设置剧本"""
-    if not game_state_service or not room_service:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="游戏服务器未启动"
-        )
-    
-    room = game_state_service.get_room(room_id)
-    if not room:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="房间不存在"
-        )
-    
-    # 创建房间控制器
-    from core.contexts.room_context import RoomContext
-    room_context = RoomContext(room)
-    
-    # 检查是否是房主
-    host = room_context.get_host()
-    if not host or host.id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="只有房主可以设置剧本"
-        )
+    # 使用SetScenarioCommand
+    from adapters.base import SetScenarioEvent
+    from services.commands.factory import CommandFactory
+    from core.rules import RuleEngine
     
     # 获取剧本ID
     scenario_id = scenario_data.get("scenario_id")
@@ -556,45 +540,47 @@ async def set_scenario(
             detail="剧本ID不能为空"
         )
     
-    # 检查剧本是否存在
+    # 创建命令工厂
+    command_factory = CommandFactory(
+        game_state_service.game_state, 
+        event_bus, 
+        None,  # AI服务暂时不需要
+        RuleEngine()  # 创建规则引擎实例
+    )
+    
+    # 创建事件
+    event = SetScenarioEvent(current_user.id, scenario_id)
+    
+    # 获取命令
+    command = command_factory.create_command(event.event_type)
+    
+    # 执行命令
+    result = await command.execute(event)
+    
+    # 处理结果
+    # 检查是否成功
+    success_message = next((msg for msg in result if msg.get("recipient") == current_user.id), None)
+    if not success_message or "已设置剧本" not in success_message.get("content", ""):
+        error_message = success_message.get("content") if success_message else "设置剧本失败"
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_message
+        )
+    
+    # 获取剧本名称
     from utils.scenario_loader import ScenarioLoader
     scenario_loader = ScenarioLoader()
     scenario = scenario_loader.load_scenario(scenario_id)
-    if not scenario:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"剧本不存在: {scenario_id}"
-        )
-    
-    # 获取当前游戏局
-    current_match = None
-    if room.current_match_id:
-        # 从游戏状态服务获取当前游戏局
-        for match in room.matches:
-            if match.id == room.current_match_id:
-                current_match = match
-                break
-    
-    if not current_match:
-        success, error_msg = False, "没有进行中的游戏"
-    else:
-        # 设置剧本
-        current_match.scenario_id = scenario_id
-        success, error_msg = True, None
-    if not success:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg or "设置剧本失败"
-        )
+    scenario_name = scenario.name if scenario else "未知剧本"
     
     logger.info(f"房主 {current_user.username} (ID: {current_user.id}) 设置了剧本: {scenario_id}")
     
     return {
         "success": True,
-        "message": f"已设置剧本: {scenario.name}",
+        "message": f"已设置剧本: {scenario_name}",
         "scenario": {
             "id": scenario_id,
-            "name": scenario.name
+            "name": scenario_name
         }
     }
 
@@ -606,44 +592,36 @@ async def kick_player(
     current_user: User = Depends(get_current_user)
 ):
     """房主踢出玩家"""
-    if not game_state_service or not room_service:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="游戏服务器未启动"
-        )
+    # 使用KickPlayerCommand
+    from adapters.base import KickPlayerEvent
+    from services.commands.factory import CommandFactory
+    from core.rules import RuleEngine
     
-    room = game_state_service.get_room(room_id)
-    if not room:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="房间不存在"
-        )
+    # 创建命令工厂
+    command_factory = CommandFactory(
+        game_state_service.game_state, 
+        event_bus, 
+        None,  # AI服务暂时不需要
+        RuleEngine()  # 创建规则引擎实例
+    )
     
-    # 创建房间控制器
-    from core.contexts.room_context import RoomContext
-    room_context = RoomContext(room)
+    # 创建事件
+    event = KickPlayerEvent(current_user.id, player_id, room_id)
     
-    # 检查是否是房主
-    host = room_context.get_host()
-    if not host or host.id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="只有房主可以踢出玩家"
-        )
+    # 获取命令
+    command = command_factory.create_command(event.event_type)
     
-    # 不能踢出自己
-    if player_id == current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="不能踢出自己"
-        )
+    # 执行命令
+    result = await command.execute(event)
     
-    # 踢出玩家
-    success, _ = await room_service.kick_player(room_context, current_user.id, player_id)
-    if not success:
+    # 处理结果
+    # 检查是否成功
+    success_message = next((msg for msg in result if msg.get("recipient") == current_user.id), None)
+    if not success_message or "已将玩家踢出房间" not in success_message.get("content", ""):
+        error_message = success_message.get("content") if success_message else "踢出玩家失败"
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="踢出玩家失败，玩家可能不在房间中或是房主"
+            detail=error_message
         )
     
     logger.info(f"房主 {current_user.username} (ID: {current_user.id}) 踢出玩家 (ID: {player_id})")

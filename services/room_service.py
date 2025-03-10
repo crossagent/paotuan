@@ -68,7 +68,8 @@ class RoomService:
         # 检查房间是否已达到最大玩家数
         if len(room_context.room.players) >= room_context.room.max_players:
             logger.warning(f"房间 {room_context.room.name} (ID: {room_context.room.id}) 已达到最大玩家数 {room_context.room.max_players}")
-            raise ValueError("已达到最大玩家数")
+            # 返回错误消息而不是抛出异常
+            return None, [{"recipient": player_id, "content": "房间已达到最大玩家数"}]
             
         # 使用RoomContext添加玩家
         player = room_context.add_player(player_id, player_name)

@@ -1,7 +1,7 @@
 import logging
 from typing import List, Dict, Any, Optional, Union
 
-from adapters.base import GameEvent, CreateRoomEvent, JoinRoomEvent, ListRoomsEvent
+from adapters.base import GameEvent, CreateRoomEvent, JoinRoomEvent, ListRoomsEvent, SetPlayerReadyEvent, KickPlayerEvent
 from services.commands.base import GameCommand
 from services.room_service import RoomService
 
@@ -150,3 +150,83 @@ class LeaveRoomCommand(GameCommand):
         except Exception as e:
             logger.exception(f"处理玩家离开事件失败: {str(e)}")
             return []
+
+
+class SetPlayerReadyCommand(GameCommand):
+    """处理设置玩家准备状态事件的命令"""
+    
+    async def execute(self, event: SetPlayerReadyEvent) -> List[Union[GameEvent, Dict[str, str]]]:
+        """执行命令
+        
+        Args:
+            event: SetPlayerReadyEvent - 事件对象
+            
+        Returns:
+            List[Union[GameEvent, Dict[str, str]]]: 响应消息列表
+        """
+        player_id = event.data["player_id"]
+        room_id = event.data["room_id"]
+        is_ready = event.data["is_ready"]
+        
+        logger.info(f"处理设置玩家准备状态事件: 玩家ID={player_id}, 房间ID={room_id}, 准备状态={is_ready}")
+        
+        # 获取房间服务
+        room_service = self.service_provider.get_service(RoomService)
+        
+        # 获取房间控制器
+        room_controller = await room_service.get_room_controller(room_id)
+        if not room_controller:
+            return [{"recipient": player_id, "content": f"房间不存在: {room_id}"}]
+        
+        # 设置玩家准备状态
+        success, message = await room_service.set_player_ready(room_controller, player_id, is_ready)
+        if not success:
+            return [{"recipient": player_id, "content": message}]
+        
+        # 检查是否所有玩家都已准备
+        all_ready = room_controller.are_all_players_ready()
+        
+        # 返回设置成功消息
+        return [{
+            "recipient": player_id, 
+            "content": f"你已{'准备完毕' if is_ready else '取消准备'}" + 
+                      (f"，所有玩家已准备完毕，可以开始游戏" if all_ready else "")
+        }]
+
+
+class KickPlayerCommand(GameCommand):
+    """处理踢出玩家事件的命令"""
+    
+    async def execute(self, event: KickPlayerEvent) -> List[Union[GameEvent, Dict[str, str]]]:
+        """执行命令
+        
+        Args:
+            event: KickPlayerEvent - 事件对象
+            
+        Returns:
+            List[Union[GameEvent, Dict[str, str]]]: 响应消息列表
+        """
+        host_id = event.data["host_id"]
+        player_id = event.data["player_id"]
+        room_id = event.data["room_id"]
+        
+        logger.info(f"处理踢出玩家事件: 房主ID={host_id}, 玩家ID={player_id}, 房间ID={room_id}")
+        
+        # 获取房间服务
+        room_service = self.service_provider.get_service(RoomService)
+        
+        # 获取房间控制器
+        room_controller = await room_service.get_room_controller(room_id)
+        if not room_controller:
+            return [{"recipient": host_id, "content": f"房间不存在: {room_id}"}]
+        
+        # 踢出玩家
+        success, message = await room_service.kick_player(room_controller, host_id, player_id)
+        if not success:
+            return [{"recipient": host_id, "content": message}]
+        
+        # 返回踢出成功消息
+        return [
+            {"recipient": host_id, "content": f"已将玩家踢出房间"},
+            {"recipient": player_id, "content": f"你已被房主踢出房间: {room_controller.room.name}"}
+        ]

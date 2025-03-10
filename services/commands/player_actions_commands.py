@@ -34,8 +34,14 @@ class PlayerJoinedCommand(GameCommand):
         
         # 如果没有房间，创建一个默认房间
         if not room_controllers:
-            room_controller = await room_service.create_room("默认房间")
-            success, message = await room_service.add_player_to_room(room_controller, player_id, player_name)
+            room_controller, _ = await room_service.create_room("默认房间")
+            player, messages = await room_service.add_player_to_room(room_controller, player_id, player_name)
+            
+            if player is None:
+                # 加入房间失败（这种情况不应该发生，因为房间是新创建的）
+                error_message = messages[0]["content"] if messages else "加入房间失败"
+                logger.error(f"创建默认房间后加入失败: {error_message}")
+                return [{"recipient": player_id, "content": error_message}]
             
             logger.info(f"创建默认房间并添加玩家: {player_name}({player_id}), 房间={room_controller.room.name}")
             
@@ -62,7 +68,13 @@ class PlayerJoinedCommand(GameCommand):
         
         # 如果只有一个房间，直接加入
         room_controller = room_controllers[0]
-        success, message = await room_service.add_player_to_room(room_controller, player_id, player_name)
+        player, messages = await room_service.add_player_to_room(room_controller, player_id, player_name)
+        
+        if player is None:
+            # 加入房间失败（可能房间已满）
+            error_message = messages[0]["content"] if messages else "加入房间失败"
+            logger.warning(f"玩家加入唯一房间失败: {error_message}")
+            return [{"recipient": player_id, "content": error_message}]
         
         logger.info(f"玩家加入唯一房间: {player_name}({player_id}), 房间={room_controller.room.name}")
         

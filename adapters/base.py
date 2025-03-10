@@ -132,6 +132,51 @@ class SelectCharacterEvent(GameEvent):
             }
         )
 
+class SetPlayerReadyEvent(GameEvent):
+    """设置玩家准备状态事件"""
+    def __init__(self, player_id: str, room_id: str, is_ready: bool = True):
+        super().__init__(
+            event_type="SET_PLAYER_READY",
+            data={
+                "player_id": player_id,
+                "room_id": room_id,
+                "is_ready": is_ready
+            }
+        )
+
+class KickPlayerEvent(GameEvent):
+    """踢出玩家事件"""
+    def __init__(self, host_id: str, player_id: str, room_id: str):
+        super().__init__(
+            event_type="KICK_PLAYER",
+            data={
+                "host_id": host_id,
+                "player_id": player_id,
+                "room_id": room_id
+            }
+        )
+
+class ListScenariosEvent(GameEvent):
+    """获取剧本列表事件"""
+    def __init__(self, player_id: str):
+        super().__init__(
+            event_type="LIST_SCENARIOS",
+            data={
+                "player_id": player_id
+            }
+        )
+
+class GetScenarioEvent(GameEvent):
+    """获取剧本详情事件"""
+    def __init__(self, player_id: str, scenario_id: str):
+        super().__init__(
+            event_type="GET_SCENARIO",
+            data={
+                "player_id": player_id,
+                "scenario_id": scenario_id
+            }
+        )
+
 class MessageAdapter(ABC):
     """消息适配器抽象基类"""
     

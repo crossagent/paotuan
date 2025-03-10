@@ -5,10 +5,11 @@ from core.game_state import GameState
 from core.events import EventBus
 from core.rules import RuleEngine
 from services.commands.base import GameCommand, ServiceProvider
-from services.commands.room_management_commands import CreateRoomCommand, JoinRoomCommand, ListRoomsCommand, LeaveRoomCommand
+from services.commands.room_management_commands import CreateRoomCommand, JoinRoomCommand, ListRoomsCommand, LeaveRoomCommand, SetPlayerReadyCommand, KickPlayerCommand
 from services.commands.player_actions_commands import PlayerJoinedCommand, SelectCharacterCommand, CharacterActionCommand
 from services.commands.match_flow_commands import StartMatchCommand, EndMatchCommand, SetScenarioCommand, PauseMatchCommand, ResumeMatchCommand
 from services.commands.dm_operations_commands import DMNarrationCommand
+from services.commands.scenario_commands import ListScenariosCommand, GetScenarioCommand
 from services.game_state_service import GameStateService
 from services.room_service import RoomService
 from services.match_service import MatchService
@@ -105,6 +106,10 @@ class CommandFactory:
             return ListRoomsCommand(self.service_provider)
         elif event_type == "PLAYER_LEFT":
             return LeaveRoomCommand(self.service_provider)
+        elif event_type == "SET_PLAYER_READY":
+            return SetPlayerReadyCommand(self.service_provider)
+        elif event_type == "KICK_PLAYER":
+            return KickPlayerCommand(self.service_provider)
         
         # 玩家操作命令
         elif event_type == "PLAYER_JOINED":
@@ -129,5 +134,11 @@ class CommandFactory:
         # DM操作命令
         elif event_type == "DM_NARRATION":
             return DMNarrationCommand(self.service_provider)
+        
+        # 剧本相关命令
+        elif event_type == "LIST_SCENARIOS":
+            return ListScenariosCommand(self.service_provider)
+        elif event_type == "GET_SCENARIO":
+            return GetScenarioCommand(self.service_provider)
         else:
             raise ValueError(f"未知事件类型: {event_type}")
