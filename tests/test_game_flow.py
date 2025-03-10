@@ -68,16 +68,17 @@ class TestGameFlow(unittest.TestCase):
             self.assertIsNotNone(ready_result, f"玩家{client.username}设置准备状态失败")
             self.assertTrue(ready_result.get("success"), f"玩家{client.username}设置准备状态操作未成功")
         
-        # 开始游戏
-        scenario_id = "test_scenario"
-        start_result = host_client.start_game(room_id, "测试场景", scenario_id)
-        self.assertIsNotNone(start_result, "开始游戏失败")
-        self.assertIsNotNone(start_result.get("match_id"), "开始游戏操作未成功")
-        
+
         # 设置剧本为test_scenario
+        scenario_id = "test_scenario"
         scenario_result = host_client.set_scenario(room_id, scenario_id)
         self.assertIsNotNone(scenario_result, "设置剧本失败")
         self.assertTrue(scenario_result.get("success"), "设置剧本操作未成功")
+
+        # 开始游戏
+        start_result = host_client.start_game(room_id, "测试场景", scenario_id)
+        self.assertIsNotNone(start_result, "开始游戏失败")
+        self.assertIsNotNone(start_result.get("match_id"), "开始游戏操作未成功")
         
         # 验证游戏状态
         room = host_client.get_room(room_id)

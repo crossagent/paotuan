@@ -8,6 +8,7 @@ from core.contexts.match_context import MatchContext
 from core.contexts.character_context import CharacterContext
 from core.contexts.room_context import RoomContext
 from core.contexts.turn_context import TurnContext
+from models.scenario import Scenario
 from services.game_state_service import GameStateService
 from services.turn_service import TurnService
 from utils.scenario_loader import ScenarioLoader
@@ -21,7 +22,7 @@ class MatchService:
     
     def __init__(self, game_state_service: GameStateService, 
                 scenario_loader: ScenarioLoader = None, rule_engine: RuleEngine = None, 
-                event_bus: EventBus = None, turn_service: TurnService = None):
+                event_bus: EventBus = None):
         """初始化游戏局服务
         
         Args:
@@ -34,9 +35,8 @@ class MatchService:
         self.scenario_loader = scenario_loader or ScenarioLoader()
         self.rule_engine = rule_engine or RuleEngine()
         self.event_bus = event_bus
-        self.turn_service = turn_service
     
-    async def create_match(self, room_context: RoomContext, scene: str = "新的冒险") -> Tuple[MatchContext, List[Dict[str, str]]]:
+    async def create_match(self, room_context: RoomContext) -> Tuple[MatchContext, List[Dict[str, str]]]:
         """创建新的游戏局
         
         Args:
@@ -54,6 +54,8 @@ class MatchService:
                     logger.warning(error_msg)
                     return None, [{"recipient": room_context.room.host_id, "content": error_msg}]
         
+        scene = room_context.get_scenario_id()
+
         # 创建新游戏局
         match_context = MatchContext.create_match(scene)
         
@@ -70,6 +72,15 @@ class MatchService:
             messages.append({"recipient": player.id, "content": create_message})
         
         logger.info(f"创建新游戏局: {scene} (ID: {match_context.match.id})")
+
+        # 创建角色选择系统回合
+        messages = []
+
+        # 通知房间中的所有玩家
+        start_message = f"游戏开始！剧本: {match_context.match.scenario_id}"
+        for player in room_context.list_players():
+            messages.append({"recipient": player.id, "content": start_message})        
+
         return match_context, messages
     
     async def start_match(self, match_context: MatchContext, room_context:RoomContext) -> Tuple[bool, List[Dict[str, str]]]:
@@ -105,26 +116,7 @@ class MatchService:
             logger.warning(error_msg)
             return False, [{"recipient": room_context.room.host_id, "content": error_msg}]
         
-        # 创建角色选择系统回合
         messages = []
-        if self.turn_service:
-            # 创建角色选择系统回合
-            system_turn_context, system_messages = await self.turn_service.transition_to_system_turn(
-                match_context=match_context,
-                room_context=room_context,
-                system_type=SystemTurnType.CHARACTER_SELECTION
-            )
-            
-            # 完成系统回合
-            system_turn_context.complete_turn()
-            
-            # 添加系统回合的消息
-            messages.extend(system_messages)
-        
-        # 通知房间中的所有玩家
-        start_message = f"游戏开始！剧本: {match_context.match.scenario_id}"
-        for player in room_context.list_players():
-            messages.append({"recipient": player.id, "content": start_message})
         
         logger.info(f"游戏局开始: ID={match_context.match.id}, 剧本={match_context.match.scenario_id}")
         return True, messages
@@ -293,7 +285,7 @@ class MatchService:
         logger.info(f"设置剧本: 游戏局ID={match_context.match.id}, 剧本ID={scenario_id}")
         return True, None, messages
     
-    def load_available_characters(self, scenario) -> List[Dict[str, Any]]:
+    def load_available_characters(self, scenario: Scenario) -> List[Dict[str, Any]]:
         """从剧本中加载可选角色列表
         
         Args:

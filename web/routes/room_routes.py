@@ -375,7 +375,7 @@ async def start_game(
     # 处理结果
     # 检查是否成功
     success_message = next((msg for msg in result if msg.get("recipient") == current_user.id), None)
-    if not success_message or "游戏已开始" not in success_message.get("content", ""):
+    if not success_message or ("游戏已开始" not in success_message.get("content", "") and "游戏局已创建" not in success_message.get("content", "")):
         error_message = success_message.get("content") if success_message else "开始游戏失败"
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

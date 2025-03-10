@@ -7,6 +7,7 @@ from services.room_service import RoomService
 from services.match_service import MatchService
 from services.turn_service import TurnService
 from utils.scenario_loader import ScenarioLoader
+from models.entities import SystemTurnType
 
 logger = logging.getLogger(__name__)
 
@@ -24,13 +25,15 @@ class StartMatchCommand(GameCommand):
         """
         player_id = event.data["player_id"]
         player_name = event.data["player_name"]
+        room_scenario_id = event.data.get("scenario_id")
         
         logger.info(f"处理开始游戏局事件: 发起者={player_name}({player_id})")
         
         # 获取服务
         room_service = self.service_provider.get_service(RoomService)
         match_service = self.service_provider.get_service(MatchService)
-        
+        turn_service = self.service_provider.get_service(TurnService)
+
         # 获取玩家所在房间的控制器
         room_context = await room_service.get_player_room_context(player_id)
         if not room_context:
@@ -45,12 +48,7 @@ class StartMatchCommand(GameCommand):
             logger.warning(f"开始游戏局失败: 房间中没有玩家")
             return [{"recipient": player_id, "content": "房间中没有玩家，无法开始游戏局"}]
         
-        try:
-            # 获取房间中保存的剧本ID
-            room_scenario_id = room_context.get_scenario_id()
-            if not room_scenario_id:
-                return await self._send_scenario_list(player_id, "请先设置剧本再开始游戏局！")
-            
+        try:    
             # 获取或创建游戏局控制器
             match_context = await match_service.get_match_context(room_context)
             
@@ -59,19 +57,33 @@ class StartMatchCommand(GameCommand):
                 logger.warning(f"无法开始新游戏局: 当前已有进行中的游戏局 ID={match_context.match.id}")
                 return [{"recipient": player_id, "content": f"无法开始游戏局: 当前已有进行中的游戏局"}]
             
+            # 设置剧本（确保使用房间中保存的剧本）
+            room_context.set_scenario(room_scenario_id)
+
             # 创建新的游戏局，使用房间中保存的剧本ID
             if not match_context:
-                match_context, create_messages = await match_service.create_match(room_context, "新的冒险")
+                match_context, create_messages = await match_service.create_match(room_context)
                 logger.info(f"为开始游戏创建新游戏局: ID={match_context.match.id}")
             
-            # 设置剧本（确保使用房间中保存的剧本）
-            if not match_context.match.scenario_id:
-                success, error_msg, scenario_messages = await match_service.set_scenario(match_context, room_context, room_scenario_id)
-                if not success:
-                    return [{"recipient": player_id, "content": f"设置剧本失败: {error_msg}"}]
-                
+            messages = []
+
+            # 创建角色选择系统回合
+            system_turn_context, system_messages = await turn_service.transition_to_system_turn(
+                match_context=match_context,
+                room_context=room_context,
+                system_type=SystemTurnType.CHARACTER_SELECTION
+            )
+            
+            # 添加系统回合的消息
+            messages.extend(system_messages)
+
+            # 检查剧本是否存在
+            from utils.scenario_loader import ScenarioLoader
+            scenario_loader = ScenarioLoader()
+            scenario = scenario_loader.load_scenario(room_scenario_id)
+
             # 加载可选角色列表
-            available_characters = await match_service.load_available_characters(match_context)
+            available_characters = match_service.load_available_characters(scenario)
             
             # 构建可选角色列表消息
             character_msg = "【可选角色】\n"
@@ -200,26 +212,8 @@ class SetScenarioCommand(GameCommand):
         
         # 设置房间的剧本
         room_context.set_scenario(scenario_id)
-        
-        # 获取或创建游戏局控制器
-        match_context = await match_service.get_match_context(room_context)
-        if not match_context:
-            match_context, create_messages = await match_service.create_match(room_context, "新的冒险")
-            logger.info(f"为设置剧本创建新游戏局: ID={match_context.match.id}")
-        
-        # 设置游戏局的剧本
-        success, error_msg, scenario_messages = await match_service.set_scenario(match_context, room_context, scenario_id)
-        if not success:
-            # 获取可用剧本列表并发送
-            scenario_loader = ScenarioLoader()
-            scenarios = scenario_loader.list_scenarios()
-            scenarios_msg = "可用剧本列表:\n"
-            for s in scenarios:
-                scenarios_msg += f"- {s['id']}: {s['name']}\n"
-                
-            return [{"recipient": player_id, "content": f"{error_msg}\n\n{scenarios_msg}"}]
             
-        return scenario_messages
+        return [{"recipient": player_id, "content": f"已设置剧本: {scenario_id}"}]
 
 
 class PauseMatchCommand(GameCommand):
